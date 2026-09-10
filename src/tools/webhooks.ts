@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { CreateWebhookResponse, Resend } from 'resend';
+import type { Resend } from 'resend';
 import { z } from 'zod';
 
 const webhookEventSchema = z.enum([
@@ -395,11 +395,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
     'rotate-webhook-signing-secret',
     ROTATE_WEBHOOK_SIGNING_SECRET_TOOL,
     async ({ webhookId }) => {
-      const response = await (
-        resend.webhooks as unknown as {
-          rotateSigningSecret: (id: string) => Promise<CreateWebhookResponse>;
-        }
-      ).rotateSigningSecret(webhookId);
+      const response = await resend.webhooks.rotateSigningSecret(webhookId);
 
       if (response.error) {
         throw new Error(
