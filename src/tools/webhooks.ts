@@ -141,6 +141,18 @@ const REPLAY_WEBHOOK_EVENT_TOOL = {
   },
 } as const;
 
+const ROTATE_WEBHOOK_SIGNING_SECRET_TOOL = {
+  title: 'Rotate Webhook Signing Secret',
+  description: `**Purpose:** Replace a webhook's signing secret with a new one — the same action as the dashboard's Rotate button. Returns the new secret.
+
+**NOT for:** Changing the endpoint URL or subscribed events (use update-webhook), or reading the current secret (use get-webhook).
+
+**When to use:** User believes the signing secret leaked, or wants to rotate it as routine hygiene. For 24 hours, payloads are signed with both the new and the previous secret, so either one verifies them. After that, only the new secret does. The user has that window to update their endpoint's verification code.`,
+  inputSchema: {
+    webhookId: z.string().nonempty().describe('Webhook ID'),
+  },
+} as const;
+
 const LIST_WEBHOOK_EVENT_ATTEMPTS_TOOL = {
   title: 'List Webhook Event Attempts',
   annotations: { readOnlyHint: true },
@@ -374,6 +386,35 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
         content: [
           { type: 'text', text: 'Webhook event replay queued.' },
           { type: 'text', text: `ID: ${response.data.id}` },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'rotate-webhook-signing-secret',
+    ROTATE_WEBHOOK_SIGNING_SECRET_TOOL,
+    async ({ webhookId }) => {
+      const response = await resend.webhooks.rotateSigningSecret(webhookId);
+
+      if (response.error) {
+        throw new Error(
+          `Failed to rotate webhook signing secret: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      const rotated = response.data;
+      return {
+        content: [
+          { type: 'text', text: 'Webhook signing secret rotated.' },
+          {
+            type: 'text',
+            text: `ID: ${rotated.id}\nSigning Secret: ${rotated.signing_secret}`,
+          },
+          {
+            type: 'text',
+            text: 'IMPORTANT: Make sure to tell the user the new signing secret. For 24 hours payloads are signed with both the new and the previous secret; after that only the new one verifies them.',
+          },
         ],
       };
     },
