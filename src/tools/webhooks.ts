@@ -48,7 +48,8 @@ const LIST_WEBHOOKS_TOOL = {
 const GET_WEBHOOK_TOOL = {
   title: 'Get Webhook',
   annotations: { readOnlyHint: true },
-  description: 'Get a webhook by ID from Resend.',
+  description:
+    'Get a webhook by ID from Resend, including its signing secret. Use this when the user needs the current secret to verify payloads; use rotate-webhook-signing-secret only to replace it.',
   inputSchema: {
     webhookId: z.string().nonempty().describe('Webhook ID'),
   },
