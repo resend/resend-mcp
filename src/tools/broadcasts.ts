@@ -169,6 +169,23 @@ const CANCEL_BROADCAST_TOOL = {
   },
 } as const;
 
+const DUPLICATE_BROADCAST_TOOL = {
+  title: 'Duplicate Broadcast',
+  description: `**Purpose:** Duplicate a broadcast by ID or Resend dashboard URL. Creates a new draft broadcast with the same segment, topic, sender, subject, reply-to, preview text, and content as the source, named after the source with " (copy)" appended (truncated to 70 characters). Any broadcast can be duplicated, including sent ones.
+
+**NOT for:** Editing the source broadcast (use update-broadcast) or sending the copy (use send-broadcast on the new draft's ID).
+
+**When to use:** User wants to "copy", "clone", "duplicate", or "reuse" an existing broadcast as the starting point for a new one.`,
+  inputSchema: {
+    broadcastId: z
+      .string()
+      .nonempty()
+      .describe(
+        'Broadcast ID or Resend dashboard URL (e.g. https://resend.com/broadcasts/<id>)',
+      ),
+  },
+} as const;
+
 const REMOVE_BROADCAST_TOOL = {
   title: 'Remove Broadcast',
   description:
@@ -647,6 +664,28 @@ export function addBroadcastTools(
         content: [
           { type: 'text', text: 'Broadcast cancelled successfully.' },
           { type: 'text', text: `ID: ${response.data.id}` },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'duplicate-broadcast',
+    DUPLICATE_BROADCAST_TOOL,
+    async ({ broadcastId: rawBroadcastId }) => {
+      const broadcastId = extractIdFromUrl(rawBroadcastId, 'broadcasts');
+      const response = await resend.broadcasts.duplicate(broadcastId);
+
+      if (response.error) {
+        throw new Error(
+          `Failed to duplicate broadcast: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      return {
+        content: [
+          { type: 'text', text: 'Broadcast duplicated successfully (draft).' },
+          { type: 'text', text: `New broadcast ID: ${response.data.id}` },
         ],
       };
     },

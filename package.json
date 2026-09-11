@@ -1,6 +1,6 @@
 {
   "name": "resend-mcp",
-  "version": "2.20.1",
+  "version": "2.21.0",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -36,7 +36,7 @@
     "dotenv": "17.4.2",
     "express": "5.2.1",
     "minimist": "1.2.8",
-    "resend": "6.27.0",
+    "resend": "6.28.0",
     "zod": "4.4.3"
   },
   "engines": {

@@ -7,9 +7,10 @@ import { addBroadcastTools } from '../../src/tools/broadcasts.js';
 
 const clickedLinks = vi.fn();
 const recipients = vi.fn();
+const duplicate = vi.fn();
 
 const resend = {
-  broadcasts: { clickedLinks, recipients },
+  broadcasts: { clickedLinks, recipients, duplicate },
 } as unknown as Resend;
 
 const apiClient = {} as ResendEditorClient;
@@ -517,5 +518,52 @@ describe('list-broadcast-recipients', () => {
     expect(textOf(result as never)).toContain(
       'Failed to list broadcast recipients',
     );
+  });
+});
+
+describe('duplicate-broadcast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    duplicate.mockResolvedValue({
+      data: { object: 'broadcast', id: 'bc_copy' },
+      error: null,
+    });
+  });
+
+  it('duplicates a broadcast and returns the new draft id', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'duplicate-broadcast',
+      arguments: { broadcastId: 'bc_1' },
+    });
+
+    expect(duplicate).toHaveBeenCalledWith('bc_1');
+    expect(textOf(result as never)).toContain('Broadcast duplicated');
+    expect(textOf(result as never)).toContain('New broadcast ID: bc_copy');
+  });
+
+  it('extracts the id from a dashboard URL', async () => {
+    const client = await makeClient();
+    await client.callTool({
+      name: 'duplicate-broadcast',
+      arguments: { broadcastId: 'https://resend.com/broadcasts/bc_1' },
+    });
+
+    expect(duplicate).toHaveBeenCalledWith('bc_1');
+  });
+
+  it('surfaces SDK errors', async () => {
+    duplicate.mockResolvedValueOnce({
+      data: null,
+      error: { name: 'not_found', message: 'Broadcast not found' },
+    });
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'duplicate-broadcast',
+      arguments: { broadcastId: 'bc_404' },
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('Failed to duplicate broadcast');
+    expect(textOf(result as never)).toContain('Broadcast not found');
   });
 });
