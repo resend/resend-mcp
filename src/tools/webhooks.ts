@@ -206,7 +206,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
           },
           {
             type: 'text',
-            text: 'IMPORTANT: Make sure to tell the user the signing secret — they will need it to verify webhook payloads and it cannot be retrieved again later.',
+            text: 'IMPORTANT: Make sure to tell the user the signing secret — they will need it to verify webhook payloads. get-webhook returns it again if needed.',
           },
         ],
       };
