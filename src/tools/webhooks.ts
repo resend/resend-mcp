@@ -48,7 +48,8 @@ const LIST_WEBHOOKS_TOOL = {
 const GET_WEBHOOK_TOOL = {
   title: 'Get Webhook',
   annotations: { readOnlyHint: true },
-  description: 'Get a webhook by ID from Resend.',
+  description:
+    'Get a webhook by ID from Resend, including its signing secret. Use this when the user needs the current secret to verify payloads; use rotate-webhook-signing-secret only to replace it.',
   inputSchema: {
     webhookId: z.string().nonempty().describe('Webhook ID'),
   },
@@ -206,7 +207,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
           },
           {
             type: 'text',
-            text: 'IMPORTANT: Make sure to tell the user the signing secret — they will need it to verify webhook payloads and it cannot be retrieved again later.',
+            text: 'IMPORTANT: Make sure to tell the user the signing secret — they will need it to verify webhook payloads. get-webhook returns it again if needed.',
           },
         ],
       };
