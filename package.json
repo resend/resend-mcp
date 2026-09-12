@@ -37,7 +37,7 @@
     "express": "5.2.1",
     "minimist": "1.2.8",
     "resend": "6.27.0",
-    "zod": "4.4.3"
+    "zod": "4.6.3"
   },
   "engines": {
     "node": ">=22"
