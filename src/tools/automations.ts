@@ -341,7 +341,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
           { type: 'text', text: `Name: ${name}\nID: ${id}` },
           {
             type: 'text',
-            text: `Preview: https://resend.com/automations/${id}`,
+            text: `Preview: https://resend.com/automations/${id}/editor`,
           },
           {
             type: 'text',
@@ -432,7 +432,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             },
             {
               type: 'text',
-              text: `Preview: https://resend.com/automations/${automation.id}`,
+              text: `Preview: https://resend.com/automations/${automation.id}/editor`,
             },
           ],
         };
@@ -514,7 +514,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
           { type: 'text', text: `New automation ID: ${newId}` },
           {
             type: 'text',
-            text: `Preview: https://resend.com/automations/${newId}`,
+            text: `Preview: https://resend.com/automations/${newId}/editor`,
           },
         ],
       };
