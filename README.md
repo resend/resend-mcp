@@ -381,6 +381,7 @@ Resend's MCP server gives your AI agent native access to the full Resend platfor
 
 - **Emails**: Send, list, get, cancel, update, share, and batch send emails. Retrieve delivery and engagement metrics. Supports HTML, plain text, attachments (local file, URL, or base64), CC/BCC, reply-to, scheduling, tags, custom headers, topic-based sending, and idempotency keys.
 - **Received Emails**: List and read inbound emails. List and download received email attachments.
+- **Inboxes** (beta): Create, list, get, update, and remove inboxes. Manage their threads, thread emails (get, reply, forward), labels, and drafts (create, update, send). Inboxes is in beta. Reach out to the Resend team to get access.
 - **Templates**: Create, list, get, update, publish, duplicate, and remove email templates. Supports composing template content and `{{{VARIABLE}}}` placeholders.
 - **Contacts**: Create, list, get, update, and remove contacts. Manage segment memberships, topic subscriptions, and CSV contact imports. Supports custom contact properties.
 - **Broadcasts**: Create, send, cancel, duplicate, list, get, update, and remove broadcast campaigns. List a broadcast's clicked links, and its recipients by event type (sent, delivered, opened, clicked, bounced, complained, unsubscribed, suppressed). Supports scheduling, personalization placeholders, and preview text.
