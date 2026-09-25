@@ -89,14 +89,21 @@ describe('get-usage', () => {
 
     expect(get).toHaveBeenCalled();
     const text = textOf(result as never);
-    expect(text).toContain('Emails (daily): 258 used / no cap');
-    expect(text).toContain('Emails (monthly): 5442 used / 10000');
+    expect(text).toContain(
+      'Emails (daily): 258 (no cap) — sent 57, received 201, resets at 2026-07-17T00:00:00.000Z',
+    );
+    expect(text).toContain(
+      'Emails (monthly): 5442 / 10000 — sent 1000, received 4442, resets at 2026-08-01T00:00:00.000Z',
+    );
     expect(text).toContain('Contacts: 85000 / 150000');
     expect(text).toContain('Segments: 2 / 3');
-    expect(text).toContain('Broadcasts: 100 / no cap');
-    expect(text).toContain('AI credits: 0 / 500');
-    expect(text).toContain('Next increase at: 2026-07-18T09:00:00.000Z');
-    expect(text).toContain('Automation runs: 0 / 1000');
+    expect(text).toContain('Broadcasts: 100 (no cap)');
+    expect(text).toContain(
+      'AI credits: 0 / 500 — next increase at 2026-07-18T09:00:00.000Z',
+    );
+    expect(text).toContain(
+      'Automation runs: 0 / 1000 — resets at 2026-08-01T00:00:00.000Z',
+    );
     expect(text).toContain('Domains: 1 / 1000');
     expect(text).toContain('Rate limit: 10 requests per 1000ms');
   });
@@ -136,10 +143,10 @@ describe('get-usage', () => {
     const result = await client.callTool({ name: 'get-usage', arguments: {} });
 
     const text = textOf(result as never);
-    expect(text).toContain('AI credits: 0 / no cap');
-    expect(text).toContain('Next increase at: n/a');
-    expect(text).toContain('Segments: 0 / no cap');
-    expect(text).toContain('Domains: 0 / no cap');
+    expect(text).toContain('AI credits: 0 (no cap)');
+    expect(text).not.toContain('next increase at');
+    expect(text).toContain('Segments: 0 (no cap)');
+    expect(text).toContain('Domains: 0 (no cap)');
   });
 
   it('surfaces SDK errors', async () => {

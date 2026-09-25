@@ -4,15 +4,19 @@ import type { Resend } from 'resend';
 const GET_USAGE_TOOL = {
   title: 'Get Usage',
   annotations: { readOnlyHint: true },
-  description: `**Purpose:** Get account-level usage and quota information: emails sent/received, contacts, segments, broadcasts, AI credits, automation runs, domains, and the API rate limit.
+  description: `**Purpose:** Retrieve the account's current usage and plan limits.
 
-**Returns:** Current usage and limit for each resource, plus reset/renewal dates where applicable. A null limit means no cap is enforced for that resource.
+**Returns:** Email sending/receiving usage (daily and monthly), contacts, segments, broadcasts, AI credits, automation runs, domains, and the account's API rate limit. A \`null\` limit means no cap applies (e.g. daily/segment caps only apply on some plan tiers; broadcasts are never capped).
 
 **When to use:**
-- User wants to check their plan usage or remaining quota
-- User asks "how many emails have I sent?", "am I close to my limit?", "what's my rate limit?", "how many AI credits do I have left?"`,
+- User wants to check how close they are to a plan limit
+- User says "how much of my quota have I used?", "what's my usage?", "am I close to my limits?"`,
   inputSchema: {},
 } as const;
+
+function formatQuota(used: number, limit: number | null): string {
+  return limit === null ? `${used} (no cap)` : `${used} / ${limit}`;
+}
 
 export function addUsageTools(server: McpServer, resend: Resend) {
   server.registerTool('get-usage', GET_USAGE_TOOL, async (_args, _ctx) => {
@@ -23,46 +27,22 @@ export function addUsageTools(server: McpServer, resend: Resend) {
     }
 
     const usage = response.data;
-    const limitText = (limit: number | null) =>
-      limit === null ? 'no cap' : limit;
 
     return {
       content: [
         {
           type: 'text',
-          text: `Emails (daily): ${usage.emails.daily.used} used / ${limitText(usage.emails.daily.limit)} (${usage.emails.daily.sent} sent, ${usage.emails.daily.received} received)\nResets at: ${usage.emails.daily.resets_at}`,
-        },
-        {
-          type: 'text',
-          text: `Emails (monthly): ${usage.emails.monthly.used} used / ${usage.emails.monthly.limit} (${usage.emails.monthly.sent} sent, ${usage.emails.monthly.received} received)\nResets at: ${usage.emails.monthly.resets_at}`,
-        },
-        {
-          type: 'text',
-          text: `Contacts: ${usage.contacts.used} / ${usage.contacts.limit}`,
-        },
-        {
-          type: 'text',
-          text: `Segments: ${usage.segments.used} / ${limitText(usage.segments.limit)}`,
-        },
-        {
-          type: 'text',
-          text: `Broadcasts: ${usage.broadcasts.used} / ${limitText(usage.broadcasts.limit)}`,
-        },
-        {
-          type: 'text',
-          text: `AI credits: ${usage.ai_credits.used} / ${limitText(usage.ai_credits.limit)}\nNext increase at: ${usage.ai_credits.next_increase_at ?? 'n/a'}`,
-        },
-        {
-          type: 'text',
-          text: `Automation runs: ${usage.automation_runs.used} / ${usage.automation_runs.limit}\nResets at: ${usage.automation_runs.resets_at}`,
-        },
-        {
-          type: 'text',
-          text: `Domains: ${usage.domains.used} / ${limitText(usage.domains.limit)}`,
-        },
-        {
-          type: 'text',
-          text: `Rate limit: ${usage.rate_limit.limit} requests per ${usage.rate_limit.duration}`,
+          text: [
+            `Emails (daily): ${formatQuota(usage.emails.daily.used, usage.emails.daily.limit)} — sent ${usage.emails.daily.sent}, received ${usage.emails.daily.received}, resets at ${usage.emails.daily.resets_at}`,
+            `Emails (monthly): ${formatQuota(usage.emails.monthly.used, usage.emails.monthly.limit)} — sent ${usage.emails.monthly.sent}, received ${usage.emails.monthly.received}, resets at ${usage.emails.monthly.resets_at}`,
+            `Contacts: ${formatQuota(usage.contacts.used, usage.contacts.limit)}`,
+            `Segments: ${formatQuota(usage.segments.used, usage.segments.limit)}`,
+            `Broadcasts: ${formatQuota(usage.broadcasts.used, usage.broadcasts.limit)}`,
+            `AI credits: ${formatQuota(usage.ai_credits.used, usage.ai_credits.limit)}${usage.ai_credits.next_increase_at ? ` — next increase at ${usage.ai_credits.next_increase_at}` : ''}`,
+            `Automation runs: ${formatQuota(usage.automation_runs.used, usage.automation_runs.limit)} — resets at ${usage.automation_runs.resets_at}`,
+            `Domains: ${formatQuota(usage.domains.used, usage.domains.limit)}`,
+            `Rate limit: ${usage.rate_limit.limit} requests per ${usage.rate_limit.duration}`,
+          ].join('\n'),
         },
       ],
     };
