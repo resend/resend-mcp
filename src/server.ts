@@ -20,6 +20,7 @@ import {
   addSuppressionTools,
   addTemplateTools,
   addTopicTools,
+  addUsageTools,
   addWebhookTools,
 } from './tools/index.js';
 import type { ServerOptions } from './types.js';
@@ -60,6 +61,7 @@ export function createMcpServer(
   addSuppressionTools(server, resend);
   addTemplateTools(server, resend, apiClient, { withEditorSession });
   addTopicTools(server, resend);
+  addUsageTools(server, resend);
   addWebhookTools(server, resend);
   return server;
 }
