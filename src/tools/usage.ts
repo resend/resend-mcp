@@ -24,7 +24,7 @@ export function addUsageTools(server: McpServer, resend: Resend) {
 
     const usage = response.data;
     const limitText = (limit: number | null) =>
-      limit === null ? 'unlimited' : limit;
+      limit === null ? 'no cap' : limit;
 
     return {
       content: [

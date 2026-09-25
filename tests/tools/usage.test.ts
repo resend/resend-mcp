@@ -89,11 +89,11 @@ describe('get-usage', () => {
 
     expect(get).toHaveBeenCalled();
     const text = textOf(result as never);
-    expect(text).toContain('Emails (daily): 258 used / unlimited');
+    expect(text).toContain('Emails (daily): 258 used / no cap');
     expect(text).toContain('Emails (monthly): 5442 used / 10000');
     expect(text).toContain('Contacts: 85000 / 150000');
     expect(text).toContain('Segments: 2 / 3');
-    expect(text).toContain('Broadcasts: 100 / unlimited');
+    expect(text).toContain('Broadcasts: 100 / no cap');
     expect(text).toContain('AI credits: 0 / 500');
     expect(text).toContain('Next increase at: 2026-07-18T09:00:00.000Z');
     expect(text).toContain('Automation runs: 0 / 1000');
@@ -136,10 +136,10 @@ describe('get-usage', () => {
     const result = await client.callTool({ name: 'get-usage', arguments: {} });
 
     const text = textOf(result as never);
-    expect(text).toContain('AI credits: 0 / unlimited');
+    expect(text).toContain('AI credits: 0 / no cap');
     expect(text).toContain('Next increase at: n/a');
-    expect(text).toContain('Segments: 0 / unlimited');
-    expect(text).toContain('Domains: 0 / unlimited');
+    expect(text).toContain('Segments: 0 / no cap');
+    expect(text).toContain('Domains: 0 / no cap');
   });
 
   it('surfaces SDK errors', async () => {
