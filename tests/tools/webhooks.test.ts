@@ -4,6 +4,7 @@ import type { Resend } from 'resend';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addWebhookTools } from '../../src/tools/webhooks.js';
 
+const createWebhook = vi.fn();
 const listEvents = vi.fn();
 const getEvent = vi.fn();
 const replayEvent = vi.fn();
@@ -12,7 +13,7 @@ const listAttempts = vi.fn();
 
 const resend = {
   webhooks: {
-    create: vi.fn(),
+    create: createWebhook,
     list: vi.fn(),
     get: vi.fn(),
     update: vi.fn(),
@@ -223,6 +224,31 @@ describe('webhook event tools', () => {
     const text = textOf(result as never);
     expect(text).toContain('500');
     expect(text).toContain('Internal Server Error');
+  });
+
+  it('create-webhook accepts the topic and contact.topics.updated events', async () => {
+    createWebhook.mockResolvedValue({
+      data: { object: 'webhook', id: WEBHOOK_ID, signing_secret: 'whsec_new' },
+      error: null,
+    });
+    const events = [
+      'contact.topics.updated',
+      'topic.created',
+      'topic.updated',
+      'topic.deleted',
+    ];
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-webhook',
+      arguments: { endpoint: 'https://example.com/webhooks', events },
+    });
+
+    expect(createWebhook).toHaveBeenCalledWith({
+      endpoint: 'https://example.com/webhooks',
+      events,
+    });
+    expect(textOf(result as never)).toContain(WEBHOOK_ID);
   });
 
   it('surfaces the API error when a list fails', async () => {
