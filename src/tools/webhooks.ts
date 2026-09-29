@@ -17,11 +17,15 @@ const webhookEventSchema = z.enum([
   'contact.created',
   'contact.updated',
   'contact.deleted',
+  'contact.topics.updated',
   'domain.created',
   'domain.updated',
   'domain.deleted',
   'suppression.added',
   'suppression.removed',
+  'topic.created',
+  'topic.updated',
+  'topic.deleted',
 ]);
 
 const CREATE_WEBHOOK_TOOL = {
