@@ -70,7 +70,9 @@ function buildSendEmailInputSchema(
           filePath: z
             .string()
             .optional()
-            .describe('Local file path to read and attach'),
+            .describe(
+              'Path to a file on the machine that runs this MCP server. The server can restrict or disable local file reads; use url or content if it does.',
+            ),
           url: z
             .string()
             .optional()
@@ -95,7 +97,7 @@ function buildSendEmailInputSchema(
       )
       .optional()
       .describe(
-        'Array of file attachments. Each needs filename plus one of: filePath, url, or content. Max 40MB total.',
+        'Array of file attachments. Each needs filename plus one of: filePath, url, or content. Prefer url or content on a remote server, where filePath is disabled by default. Max 40MB total.',
       ),
     tags: z
       .array(

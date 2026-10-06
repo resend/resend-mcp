@@ -6,13 +6,13 @@ import { readAllowedFile } from '../lib/safe-access.js';
 const CREATE_CONTACT_IMPORT_TOOL = {
   title: 'Create Contact Import',
   description:
-    'Bulk-import contacts from a CSV file into Resend. The import is processed asynchronously: this returns an import ID immediately, then use get-contact-import to poll its status and counts. Provide the CSV via exactly one of `filePath`, `content`, or `url`. Max file size 100MB.',
+    'Bulk-import contacts from a CSV file into Resend. The import is processed asynchronously: this returns an import ID immediately, then use get-contact-import to poll its status and counts. Provide the CSV via exactly one of `filePath`, `content`, or `url`. Prefer `content` or `url` on a remote server, where `filePath` is disabled by default. Max file size 100MB.',
   inputSchema: {
     filePath: z
       .string()
       .optional()
       .describe(
-        'Local path to a CSV file to read and upload. Use one of filePath, content, or url.',
+        'Path to a CSV file on the machine that runs this MCP server. The server can restrict or disable local file reads. Use one of filePath, content, or url.',
       ),
     content: z
       .string()
