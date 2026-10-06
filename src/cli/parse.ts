@@ -39,8 +39,11 @@ function parseListOption(
   envKey: string,
 ): string[] | undefined {
   const fromArg = parsed[argKey];
-  if (Array.isArray(fromArg)) return fromArg;
-  const raw = typeof fromArg === 'string' ? fromArg : env[envKey];
+  const raw = Array.isArray(fromArg)
+    ? fromArg.join(',')
+    : typeof fromArg === 'string'
+      ? fromArg
+      : env[envKey];
   if (typeof raw !== 'string') return undefined;
   const list = raw
     .split(',')

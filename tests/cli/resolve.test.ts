@@ -212,6 +212,24 @@ describe('resolveConfig allowed file directories', () => {
     }
   });
 
+  it('splits and drops blanks in a repeated --allowed-file-dirs flag', () => {
+    const result = resolveConfig(
+      parseArgs([
+        '--key',
+        're_abc',
+        '--allowed-file-dirs',
+        '',
+        '--allowed-file-dirs',
+        '/a, /b',
+      ]),
+      {},
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toEqual(['/a', '/b']);
+    }
+  });
+
   it('falls back to MCP_ALLOWED_FILE_DIRS', () => {
     const result = resolveConfig(parseArgs(['--http']), {
       MCP_ALLOWED_FILE_DIRS: '/a,/b',

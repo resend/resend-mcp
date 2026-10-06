@@ -49,6 +49,17 @@ describe('resolveAllowedPath', () => {
     ).rejects.toThrow('outside the allowed directories');
   });
 
+  it('gives a missing file the same error as a file outside the list', async () => {
+    const missing = join(outside, 'missing.txt');
+    const error = await readAllowedFile(missing, [allowed]).catch(
+      (e: Error) => e,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      'File not found or outside the allowed directories.',
+    );
+  });
+
   it('rejects parent-directory traversal', async () => {
     await expect(
       readAllowedFile(join(allowed, '..', 'outside', 'secret.txt'), [allowed]),

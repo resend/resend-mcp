@@ -27,13 +27,15 @@ export async function resolveAllowedPath(
     );
   }
 
-  const target = await realpath(resolve(filePath));
-  for (const dir of allowedDirs) {
-    const base = await realpath(resolve(dir)).catch(() => null);
-    if (base !== null && isInside(base, target)) return target;
+  const target = await realpath(resolve(filePath)).catch(() => null);
+  if (target !== null) {
+    for (const dir of allowedDirs) {
+      const base = await realpath(resolve(dir)).catch(() => null);
+      if (base !== null && isInside(base, target)) return target;
+    }
   }
 
-  throw new Error('File path is outside the allowed directories.');
+  throw new Error('File not found or outside the allowed directories.');
 }
 
 /**
