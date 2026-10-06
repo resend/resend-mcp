@@ -1,6 +1,10 @@
 import type { ParsedArgs } from 'minimist';
 import { DEFAULT_HTTP_PORT } from './constants.js';
-import { parseAllowedHosts, parseReplierAddresses } from './parse.js';
+import {
+  parseAllowedFileDirs,
+  parseAllowedHosts,
+  parseReplierAddresses,
+} from './parse.js';
 import type { ResolveResult } from './types.js';
 
 function resolveHost(
@@ -66,6 +70,7 @@ export function resolveConfig(
     senderEmailAddress: senderEmailAddress ?? '',
     replierEmailAddresses: parseReplierAddresses(parsed, env),
     port,
+    allowedFileDirs: parseAllowedFileDirs(parsed, env),
   };
 
   return {

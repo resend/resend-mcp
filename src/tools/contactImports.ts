@@ -1,18 +1,18 @@
-import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { readAllowedFile } from '../lib/safe-access.js';
 
 const CREATE_CONTACT_IMPORT_TOOL = {
   title: 'Create Contact Import',
   description:
-    'Bulk-import contacts from a CSV file into Resend. The import is processed asynchronously: this returns an import ID immediately, then use get-contact-import to poll its status and counts. Provide the CSV via exactly one of `filePath`, `content`, or `url`. Max file size 100MB.',
+    'Bulk-import contacts from a CSV file into Resend. The import is processed asynchronously: this returns an import ID immediately, then use get-contact-import to poll its status and counts. Provide the CSV via exactly one of `filePath`, `content`, or `url`. Prefer `content` or `url` on a remote server, where `filePath` is disabled by default. Max file size 100MB.',
   inputSchema: {
     filePath: z
       .string()
       .optional()
       .describe(
-        'Local path to a CSV file to read and upload. Use one of filePath, content, or url.',
+        'Path to a CSV file on the machine that runs this MCP server. The server can restrict or disable local file reads. Use one of filePath, content, or url.',
       ),
     content: z
       .string()
@@ -139,7 +139,11 @@ const LIST_CONTACT_IMPORTS_TOOL = {
   },
 } as const;
 
-export function addContactImportTools(server: McpServer, resend: Resend) {
+export function addContactImportTools(
+  server: McpServer,
+  resend: Resend,
+  { allowedFileDirs }: { allowedFileDirs?: string[] } = {},
+) {
   server.registerTool(
     'create-contact-import',
     CREATE_CONTACT_IMPORT_TOOL,
@@ -164,7 +168,7 @@ export function addContactImportTools(server: McpServer, resend: Resend) {
 
       let fileData: BlobPart;
       if (filePath !== undefined) {
-        fileData = await readFile(filePath);
+        fileData = await readAllowedFile(filePath, allowedFileDirs);
       } else if (url !== undefined) {
         const res = await fetch(url);
         if (!res.ok) {

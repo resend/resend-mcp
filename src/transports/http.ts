@@ -86,6 +86,10 @@ export async function runHttp(
   httpOptions: HttpTransportOptions = {},
 ): Promise<Server> {
   const { host = '127.0.0.1', allowedHosts } = httpOptions;
+  const serverOptions: ServerOptions = {
+    ...options,
+    allowedFileDirs: options.allowedFileDirs ?? [],
+  };
   const app = createMcpExpressApp({ host, allowedHosts });
 
   app.get('/health', (_req: IncomingMessage, res: ServerResponse) => {
@@ -104,7 +108,7 @@ export async function runHttp(
           'Unauthorized: provide a Resend API key via Authorization: Bearer <key>',
         );
       }
-      return createMcpServer(new Resend(apiKey), options, apiKey);
+      return createMcpServer(new Resend(apiKey), serverOptions, apiKey);
     },
     { legacy: 'reject' },
   );
@@ -165,7 +169,7 @@ export async function runHttp(
         const sid = transport!.sessionId;
         if (sid && sessions[sid]) delete sessions[sid];
       };
-      const server = createMcpServer(resend, options, apiKey);
+      const server = createMcpServer(resend, serverOptions, apiKey);
       await server.connect(transport);
     } else if (sessionId && !sessions[sessionId]) {
       res.statusCode = 404;

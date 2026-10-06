@@ -7,6 +7,11 @@ interface BaseConfig {
   senderEmailAddress: string;
   replierEmailAddresses: string[];
   port: number;
+  /**
+   * Directories local file reads are limited to. Undefined means unrestricted
+   * in stdio mode and disabled in HTTP mode.
+   */
+  allowedFileDirs?: string[];
 }
 
 /**

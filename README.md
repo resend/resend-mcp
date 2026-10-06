@@ -362,6 +362,7 @@ You can pass additional arguments to configure the local server:
 - `--port`: HTTP port when using `--http` (default: 3000, or `MCP_PORT` env var)
 - `--host`: Host for DNS-rebinding protection when using `--http` (default: `127.0.0.1`, or `MCP_HOST`). Set to `0.0.0.0` to disable `Host` validation behind a proxy/load balancer.
 - `--allowed-hosts`: Comma-separated `Host` allow-list when using `--http` (or `MCP_ALLOWED_HOSTS`)
+- `--allowed-file-dirs`: Comma-separated directories that local file attachments and CSV imports may be read from (or `MCP_ALLOWED_FILE_DIRS`). Unrestricted on stdio when unset; always disabled over `--http` unless set.
 
 **Environment variables:**
 
@@ -371,9 +372,13 @@ You can pass additional arguments to configure the local server:
 - `MCP_PORT`: HTTP port when using `--http` (optional)
 - `MCP_HOST`: Host for DNS-rebinding protection when using `--http` (optional)
 - `MCP_ALLOWED_HOSTS`: Comma-separated `Host` allow-list when using `--http` (optional)
+- `MCP_ALLOWED_FILE_DIRS`: Comma-separated directories local files may be read from (optional)
 
 > [!NOTE]
 > If you don't provide a sender email address, the MCP server will ask you to provide one each time you call the tool.
+
+> [!WARNING]
+> `send-email` (`attachments[].filePath`) and `create-contact-import` (`filePath`) read local files. Over `--http` this is disabled by default so remote clients can't read the server's disk; use `--allowed-file-dirs` to opt in for specific directories. On stdio, set `--allowed-file-dirs` to stop a prompt-injected agent from attaching files outside the folders you choose.
 
 ## MCP Server Tools
 

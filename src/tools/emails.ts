@@ -1,7 +1,7 @@
-import fs from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { readAllowedFile } from '../lib/safe-access.js';
 
 const SEND_EMAIL_TOOL_BASE = {
   title: 'Send Email',
@@ -70,7 +70,9 @@ function buildSendEmailInputSchema(
           filePath: z
             .string()
             .optional()
-            .describe('Local file path to read and attach'),
+            .describe(
+              'Path to a file on the machine that runs this MCP server. The server can restrict or disable local file reads; use url or content if it does.',
+            ),
           url: z
             .string()
             .optional()
@@ -95,7 +97,7 @@ function buildSendEmailInputSchema(
       )
       .optional()
       .describe(
-        'Array of file attachments. Each needs filename plus one of: filePath, url, or content. Max 40MB total.',
+        'Array of file attachments. Each needs filename plus one of: filePath, url, or content. Prefer url or content on a remote server, where filePath is disabled by default. Max 40MB total.',
       ),
     tags: z
       .array(
@@ -541,9 +543,11 @@ export function addEmailTools(
   {
     senderEmailAddress,
     replierEmailAddresses,
+    allowedFileDirs,
   }: {
     senderEmailAddress?: string;
     replierEmailAddresses: string[];
+    allowedFileDirs?: string[];
   },
 ) {
   server.registerTool(
@@ -655,8 +659,10 @@ export function addEmailTools(
             // Priority: filePath > url > content
             if (att.filePath) {
               // Read local file
-              const fileBuffer = await fs.readFile(att.filePath);
-              result.content = fileBuffer;
+              result.content = await readAllowedFile(
+                att.filePath,
+                allowedFileDirs,
+              );
             } else if (att.url) {
               // Let Resend fetch from URL
               result.path = att.url;
