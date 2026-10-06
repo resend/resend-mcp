@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { readAllowedFile } from '../lib/safe-access.js';
 
 const CREATE_CONTACT_IMPORT_TOOL = {
   title: 'Create Contact Import',
@@ -139,7 +139,11 @@ const LIST_CONTACT_IMPORTS_TOOL = {
   },
 } as const;
 
-export function addContactImportTools(server: McpServer, resend: Resend) {
+export function addContactImportTools(
+  server: McpServer,
+  resend: Resend,
+  { allowedFileDirs }: { allowedFileDirs?: string[] } = {},
+) {
   server.registerTool(
     'create-contact-import',
     CREATE_CONTACT_IMPORT_TOOL,
@@ -164,7 +168,7 @@ export function addContactImportTools(server: McpServer, resend: Resend) {
 
       let fileData: BlobPart;
       if (filePath !== undefined) {
-        fileData = await readFile(filePath);
+        fileData = await readAllowedFile(filePath, allowedFileDirs);
       } else if (url !== undefined) {
         const res = await fetch(url);
         if (!res.ok) {

@@ -1,7 +1,10 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addEmailTools } from '../../src/tools/emails.js';
 
 const send = vi.fn();
@@ -14,10 +17,11 @@ const resend = {
   batch: { send: batchSend },
 } as unknown as Resend;
 
-async function makeClient() {
+async function makeClient(options: { allowedFileDirs?: string[] } = {}) {
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   addEmailTools(server, resend, {
     replierEmailAddresses: [],
+    ...options,
   });
   const client = new Client({ name: 'test-client', version: '0.0.0' });
   const [clientTransport, serverTransport] =
@@ -717,5 +721,121 @@ describe('get-email-metrics', () => {
     });
 
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('send-email local file attachments', () => {
+  let root: string;
+  let allowed: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    send.mockResolvedValue({ data: { id: 'email_1' }, error: null });
+    root = await mkdtemp(join(tmpdir(), 'send-email-'));
+    allowed = join(root, 'allowed');
+    outside = join(root, 'outside');
+    await mkdir(allowed);
+    await mkdir(outside);
+    await writeFile(join(allowed, 'report.txt'), 'report');
+    await writeFile(join(outside, 'secret.txt'), 'secret');
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  function sendWithAttachment(client: Client, filePath: string) {
+    return client.callTool({
+      name: 'send-email',
+      arguments: {
+        from: 'onboarding@resend.dev',
+        to: ['delivered@resend.dev'],
+        subject: 'hello',
+        text: 'world',
+        attachments: [{ filename: 'file.txt', filePath }],
+      },
+    });
+  }
+
+  it('attaches files inside an allowed directory', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await sendWithAttachment(
+      client,
+      join(allowed, 'report.txt'),
+    );
+
+    expect(result.isError).toBeFalsy();
+    const [attachment] = send.mock.calls[0][0].attachments;
+    expect(attachment.content.toString()).toBe('report');
+  });
+
+  it('attaches any file when no allow-list is configured', async () => {
+    const client = await makeClient();
+    const result = await sendWithAttachment(
+      client,
+      join(outside, 'secret.txt'),
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses files outside the allowed directories', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await sendWithAttachment(
+      client,
+      join(outside, 'secret.txt'),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('outside the allowed');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('refuses path traversal out of the allowed directory', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await sendWithAttachment(
+      client,
+      join(allowed, '..', 'outside', 'secret.txt'),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('refuses every local file when the allow-list is empty', async () => {
+    const client = await makeClient({ allowedFileDirs: [] });
+    const result = await sendWithAttachment(
+      client,
+      join(allowed, 'report.txt'),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('Local file access is disabled');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('still accepts base64 content when local file access is disabled', async () => {
+    const client = await makeClient({ allowedFileDirs: [] });
+    const result = await client.callTool({
+      name: 'send-email',
+      arguments: {
+        from: 'onboarding@resend.dev',
+        to: ['delivered@resend.dev'],
+        subject: 'hello',
+        text: 'world',
+        attachments: [
+          {
+            filename: 'file.txt',
+            content: Buffer.from('inline').toString('base64'),
+          },
+        ],
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const [attachment] = send.mock.calls[0][0].attachments;
+    expect(attachment.content.toString()).toBe('inline');
   });
 });

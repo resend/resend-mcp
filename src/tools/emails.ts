@@ -1,7 +1,7 @@
-import fs from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { readAllowedFile } from '../lib/safe-access.js';
 
 const SEND_EMAIL_TOOL_BASE = {
   title: 'Send Email',
@@ -541,9 +541,11 @@ export function addEmailTools(
   {
     senderEmailAddress,
     replierEmailAddresses,
+    allowedFileDirs,
   }: {
     senderEmailAddress?: string;
     replierEmailAddresses: string[];
+    allowedFileDirs?: string[];
   },
 ) {
   server.registerTool(
@@ -655,8 +657,10 @@ export function addEmailTools(
             // Priority: filePath > url > content
             if (att.filePath) {
               // Read local file
-              const fileBuffer = await fs.readFile(att.filePath);
-              result.content = fileBuffer;
+              result.content = await readAllowedFile(
+                att.filePath,
+                allowedFileDirs,
+              );
             } else if (att.url) {
               // Let Resend fetch from URL
               result.path = att.url;

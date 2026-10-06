@@ -32,6 +32,23 @@ export function parseReplierAddresses(
   return [];
 }
 
+function parseListOption(
+  parsed: ParsedArgs,
+  argKey: string,
+  env: NodeJS.ProcessEnv,
+  envKey: string,
+): string[] | undefined {
+  const fromArg = parsed[argKey];
+  if (Array.isArray(fromArg)) return fromArg;
+  const raw = typeof fromArg === 'string' ? fromArg : env[envKey];
+  if (typeof raw !== 'string') return undefined;
+  const list = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length ? list : undefined;
+}
+
 /**
  * Parse the allowed-hosts list from argv and env. argv wins. Returns undefined
  * when neither is set, so the SDK's host-based default applies.
@@ -40,21 +57,21 @@ export function parseAllowedHosts(
   parsed: ParsedArgs,
   env: NodeJS.ProcessEnv,
 ): string[] | undefined {
-  if (Array.isArray(parsed['allowed-hosts'])) return parsed['allowed-hosts'];
-  if (typeof parsed['allowed-hosts'] === 'string') {
-    const list = parsed['allowed-hosts']
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return list.length ? list : undefined;
-  }
-  const v = env.MCP_ALLOWED_HOSTS;
-  if (typeof v === 'string' && v.trim()) {
-    const list = v
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return list.length ? list : undefined;
-  }
-  return undefined;
+  return parseListOption(parsed, 'allowed-hosts', env, 'MCP_ALLOWED_HOSTS');
+}
+
+/**
+ * Parse the allowed file directories from argv and env. argv wins. Returns
+ * undefined when neither is set, so the transport's default policy applies.
+ */
+export function parseAllowedFileDirs(
+  parsed: ParsedArgs,
+  env: NodeJS.ProcessEnv,
+): string[] | undefined {
+  return parseListOption(
+    parsed,
+    'allowed-file-dirs',
+    env,
+    'MCP_ALLOWED_FILE_DIRS',
+  );
 }

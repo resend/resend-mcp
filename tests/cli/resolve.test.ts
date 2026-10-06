@@ -173,3 +173,73 @@ describe('resolveConfig', () => {
     if (outOfRange.ok) expect(outOfRange.config.port).toBe(3000);
   });
 });
+
+describe('resolveConfig allowed file directories', () => {
+  it('leaves allowedFileDirs undefined when not configured', () => {
+    const result = resolveConfig(parseArgs(['--key', 're_abc']), {});
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toBeUndefined();
+    }
+  });
+
+  it('parses a comma-separated --allowed-file-dirs list', () => {
+    const result = resolveConfig(
+      parseArgs(['--key', 're_abc', '--allowed-file-dirs', '/a, /b ,']),
+      {},
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toEqual(['/a', '/b']);
+    }
+  });
+
+  it('accepts a repeated --allowed-file-dirs flag', () => {
+    const result = resolveConfig(
+      parseArgs([
+        '--key',
+        're_abc',
+        '--allowed-file-dirs',
+        '/a',
+        '--allowed-file-dirs',
+        '/b',
+      ]),
+      {},
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toEqual(['/a', '/b']);
+    }
+  });
+
+  it('falls back to MCP_ALLOWED_FILE_DIRS', () => {
+    const result = resolveConfig(parseArgs(['--http']), {
+      MCP_ALLOWED_FILE_DIRS: '/a,/b',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toEqual(['/a', '/b']);
+    }
+  });
+
+  it('prefers argv over the environment', () => {
+    const result = resolveConfig(
+      parseArgs(['--http', '--allowed-file-dirs', '/cli']),
+      { MCP_ALLOWED_FILE_DIRS: '/env' },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toEqual(['/cli']);
+    }
+  });
+
+  it('treats blank values as unset', () => {
+    const result = resolveConfig(parseArgs(['--http']), {
+      MCP_ALLOWED_FILE_DIRS: '  ,  ',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.allowedFileDirs).toBeUndefined();
+    }
+  });
+});
