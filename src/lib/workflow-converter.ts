@@ -38,6 +38,18 @@ const BRANCHING_STEP_TYPES = {
   Record<AutomationStepType, readonly AutomationConnectionType[]>
 >;
 
+// API responses use snake_case; workflow configs use SDK input field names.
+const RESPONSE_CONFIG_FIELDS = {
+  trigger: { event_name: 'eventName' },
+  delay: {},
+  send_email: { reply_to: 'replyTo' },
+  wait_for_event: { event_name: 'eventName', filter_rule: 'filterRule' },
+  condition: {},
+  contact_update: { first_name: 'firstName', last_name: 'lastName' },
+  contact_delete: {},
+  add_to_segment: { segment_id: 'segmentId' },
+} as const satisfies Record<AutomationStepType, Record<string, string>>;
+
 function hasBranches(step: WorkflowStep): step is BranchingStep {
   return 'branches' in step;
 }
@@ -127,6 +139,16 @@ export function sdkResponseToWorkflow(
   const steps: WorkflowStep[] = [];
 
   for (const step of responseSteps) {
+    const config = { ...step.config };
+    for (const [apiField, sdkField] of Object.entries(
+      RESPONSE_CONFIG_FIELDS[step.type] ?? {},
+    )) {
+      if (Object.hasOwn(config, apiField)) {
+        config[sdkField] = config[apiField];
+        delete config[apiField];
+      }
+    }
+
     const conns = connectionsByFrom.get(step.key);
     const branchTypes =
       BRANCHING_STEP_TYPES[step.type as keyof typeof BRANCHING_STEP_TYPES];
@@ -139,14 +161,14 @@ export function sdkResponseToWorkflow(
       steps.push({
         key: step.key,
         type: step.type,
-        config: step.config,
+        config,
         branches,
       });
     } else {
       steps.push({
         key: step.key,
         type: step.type,
-        config: step.config,
+        config,
         next: conns?.get('default') ?? null,
       });
     }
