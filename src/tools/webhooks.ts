@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { Resend } from 'resend';
+import type { Resend, WebhookEvent } from 'resend';
 import { z } from 'zod';
 
 const webhookEventSchema = z.enum([
@@ -26,12 +26,32 @@ const webhookEventSchema = z.enum([
   'topic.created',
   'topic.updated',
   'topic.deleted',
+  'inbox.created',
+  'inbox.updated',
+  'inbox.deleted',
+  'inbox.thread.created',
+  'inbox.email.received',
+  'inbox.email.sent',
+  'inbox.thread.folder.updated',
+  'inbox.thread.assigned',
+  'inbox.thread.unassigned',
+  'inbox.thread.labels.updated',
+  'inbox.draft.created',
+  'inbox.draft.updated',
+  'inbox.draft.sent',
+  'inbox.draft.deleted',
 ]);
+
+// The resend SDK's WebhookEvent type has no inbox.* events (still missing in
+// 6.32.1), but the API accepts them.
+function asSdkWebhookEvents(events: z.infer<typeof webhookEventSchema>[]) {
+  return events as WebhookEvent[];
+}
 
 const CREATE_WEBHOOK_TOOL = {
   title: 'Create Webhook',
   description:
-    'Create a new webhook in Resend. A webhook allows you to receive notifications at a specified URL when certain events occur (e.g. email.sent, email.delivered, email.bounced).',
+    'Create a new webhook in Resend. A webhook allows you to receive notifications at a specified URL when certain events occur (e.g. email.sent, email.delivered, email.bounced, inbox.email.received).',
   inputSchema: {
     endpoint: z.url().describe('The URL where webhook events will be sent'),
     events: webhookEventSchema
@@ -193,7 +213,10 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
     'create-webhook',
     CREATE_WEBHOOK_TOOL,
     async ({ endpoint, events }) => {
-      const response = await resend.webhooks.create({ endpoint, events });
+      const response = await resend.webhooks.create({
+        endpoint,
+        events: asSdkWebhookEvents(events),
+      });
 
       if (response.error) {
         throw new Error(
@@ -276,7 +299,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
     async ({ webhookId, endpoint, events, status }) => {
       const response = await resend.webhooks.update(webhookId, {
         endpoint,
-        events,
+        events: events && asSdkWebhookEvents(events),
         status,
       });
 
