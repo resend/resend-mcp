@@ -1,4 +1,4 @@
-import type { Response as ResendResponse } from 'resend';
+import type { IdempotentRequest, Response as ResendResponse } from 'resend';
 
 /** Values copied from `packages/inboxes/src/types/threads.ts`, the source of truth. */
 export const INBOX_MESSAGE_FOLDERS = [
@@ -271,7 +271,7 @@ export type ReplyInboxThreadEmailOptions = {
   text?: string;
 }> & {
     subject?: string;
-  };
+  } & IdempotentRequest;
 
 export type ReplyInboxThreadEmailResponseSuccess = InboxMessage & {
   email_id: string;
@@ -280,7 +280,7 @@ export type ReplyInboxThreadEmailResponseSuccess = InboxMessage & {
 export type ReplyInboxThreadEmailResponse =
   ResendResponse<ReplyInboxThreadEmailResponseSuccess>;
 
-export interface ForwardInboxThreadEmailOptions {
+export interface ForwardInboxThreadEmailOptions extends IdempotentRequest {
   inboxId: string;
   threadId: string;
   emailId: string;
@@ -483,7 +483,7 @@ export interface RemoveInboxDraftResponseSuccess {
 export type RemoveInboxDraftResponse =
   ResendResponse<RemoveInboxDraftResponseSuccess>;
 
-export interface SendInboxDraftOptions {
+export interface SendInboxDraftOptions extends IdempotentRequest {
   inboxId: string;
   draftId: string;
 }

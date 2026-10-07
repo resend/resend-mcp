@@ -144,6 +144,24 @@ describe('InboxesClient request mapping', () => {
     expect(body).toEqual({ text: 'On it.' });
   });
 
+  it('sends idempotencyKey as the Idempotency-Key header, and no header without one', async () => {
+    const fetchMock = stubOkFetch();
+
+    await client().drafts.send({
+      inboxId: 'inbox_1',
+      draftId: 'draft_1',
+      idempotencyKey: 'send-draft/123456789',
+    });
+    await client().drafts.send({ inboxId: 'inbox_1', draftId: 'draft_1' });
+
+    const [withKey, withoutKey] = fetchMock.mock.calls.map(
+      (call) =>
+        new Headers((call as unknown as [string, RequestInit])[1].headers),
+    );
+    expect(withKey?.get('Idempotency-Key')).toBe('send-draft/123456789');
+    expect(withoutKey?.has('Idempotency-Key')).toBe(false);
+  });
+
   it('sends a DELETE with no body', async () => {
     const fetchMock = stubOkFetch();
 

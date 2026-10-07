@@ -2154,3 +2154,133 @@ describe('inbox tools', () => {
     expect(text).toContain('This draft has no recipients');
   });
 });
+
+describe('inbox sending idempotency key', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    replyToInboxThreadEmail.mockResolvedValue({
+      data: {
+        ...INBOUND_MESSAGE,
+        email_id: SENT_EMAIL_ID,
+        direction: 'outbound',
+        attachments: [],
+      },
+      error: null,
+    });
+    forwardInboxThreadEmail.mockResolvedValue({
+      data: FORWARDED_MESSAGE,
+      error: null,
+    });
+    sendInboxDraft.mockResolvedValue({
+      data: {
+        object: 'inbox_draft',
+        id: DRAFT_ID,
+        thread_id: THREAD_ID,
+        email_id: SENT_EMAIL_ID,
+      },
+      error: null,
+    });
+  });
+
+  it('reply-to-inbox-thread-email passes idempotencyKey through to the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'reply-to-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'On it.',
+        idempotencyKey: 'reply-refund/123456789',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(replyToInboxThreadEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'reply-refund/123456789' }),
+    );
+  });
+
+  it('reply-to-inbox-thread-email rejects an empty idempotencyKey before calling the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'reply-to-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'On it.',
+        idempotencyKey: '',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(replyToInboxThreadEmail).not.toHaveBeenCalled();
+  });
+
+  it('forward-inbox-thread-email passes idempotencyKey through to the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'forward-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        to: 'teammate@example.com',
+        idempotencyKey: 'forward-refund/123456789',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(forwardInboxThreadEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'forward-refund/123456789' }),
+    );
+  });
+
+  it('forward-inbox-thread-email rejects an empty idempotencyKey before calling the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'forward-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        to: 'teammate@example.com',
+        idempotencyKey: '',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(forwardInboxThreadEmail).not.toHaveBeenCalled();
+  });
+
+  it('send-inbox-draft passes idempotencyKey through to the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        draftId: DRAFT_ID,
+        idempotencyKey: 'send-draft/123456789',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(sendInboxDraft).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      draftId: DRAFT_ID,
+      idempotencyKey: 'send-draft/123456789',
+    });
+  });
+
+  it('send-inbox-draft rejects an empty idempotencyKey before calling the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID, idempotencyKey: '' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(sendInboxDraft).not.toHaveBeenCalled();
+  });
+});

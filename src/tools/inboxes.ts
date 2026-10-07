@@ -340,6 +340,14 @@ const REPLY_TO_INBOX_THREAD_EMAIL_TOOL = {
       .describe(
         "Subject for the reply. Omit to inherit the thread's subject, which is usually what you want.",
       ),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        'Optional unique key that prevents duplicate sends on retries (sent as the Idempotency-Key header). Use the same key when retrying the same logical email; use a new key for a different email. Must be 1-256 characters.',
+      ),
   }),
 } as const;
 
@@ -391,6 +399,14 @@ const FORWARD_INBOX_THREAD_EMAIL_TOOL = {
       .optional()
       .describe(
         "Subject for the forwarded email. Omit to keep the original message's subject.",
+      ),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        'Optional unique key that prevents duplicate sends on retries (sent as the Idempotency-Key header). Use the same key when retrying the same logical email; use a new key for a different email. Must be 1-256 characters.',
       ),
   }),
 } as const;
@@ -694,6 +710,14 @@ const SEND_INBOX_DRAFT_TOOL = {
       .string()
       .nonempty()
       .describe('Draft ID. Use list-inbox-drafts to find draft IDs.'),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        'Optional unique key that prevents duplicate sends on retries (sent as the Idempotency-Key header). Use the same key when retrying the same logical email; use a new key for a different email. Must be 1-256 characters.',
+      ),
   }),
 } as const;
 
@@ -1260,7 +1284,15 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
   server.registerTool(
     'reply-to-inbox-thread-email',
     REPLY_TO_INBOX_THREAD_EMAIL_TOOL,
-    async ({ inboxId, threadId, emailId, html, text, subject }) => {
+    async ({
+      inboxId,
+      threadId,
+      emailId,
+      html,
+      text,
+      subject,
+      idempotencyKey,
+    }) => {
       let response: ReplyInboxThreadEmailResponse;
       if (html !== undefined) {
         response = await inboxes.threads.emails.reply({
@@ -1270,6 +1302,7 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
           html,
           text,
           subject,
+          idempotencyKey,
         });
       } else if (text !== undefined) {
         response = await inboxes.threads.emails.reply({
@@ -1278,6 +1311,7 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
           emailId,
           text,
           subject,
+          idempotencyKey,
         });
       } else {
         throw new Error(
@@ -1314,7 +1348,16 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
   server.registerTool(
     'forward-inbox-thread-email',
     FORWARD_INBOX_THREAD_EMAIL_TOOL,
-    async ({ inboxId, threadId, emailId, to, html, text, subject }) => {
+    async ({
+      inboxId,
+      threadId,
+      emailId,
+      to,
+      html,
+      text,
+      subject,
+      idempotencyKey,
+    }) => {
       const response = await inboxes.threads.emails.forward({
         inboxId,
         threadId,
@@ -1323,6 +1366,7 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
         html,
         text,
         subject,
+        idempotencyKey,
       });
 
       throwIfResendFailed(response, 'Failed to forward inbox thread email');
@@ -1634,8 +1678,12 @@ export function addInboxTools(server: McpServer, inboxes: InboxesClient) {
   server.registerTool(
     'send-inbox-draft',
     SEND_INBOX_DRAFT_TOOL,
-    async ({ inboxId, draftId }) => {
-      const response = await inboxes.drafts.send({ inboxId, draftId });
+    async ({ inboxId, draftId, idempotencyKey }) => {
+      const response = await inboxes.drafts.send({
+        inboxId,
+        draftId,
+        idempotencyKey,
+      });
 
       throwIfResendFailed(response, 'Failed to send inbox draft');
 

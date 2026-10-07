@@ -101,20 +101,32 @@ class InboxThreadEmailsClient {
   async reply(
     options: ReplyInboxThreadEmailOptions,
   ): Promise<ReplyInboxThreadEmailResponse> {
-    const { inboxId, threadId, emailId, html, text, subject } = options;
+    const { inboxId, threadId, emailId, html, text, subject, idempotencyKey } =
+      options;
     return this.resend.post(
       `${threadEmailPath(inboxId, threadId, emailId)}/reply`,
       withoutUndefined({ html, text, subject }),
+      idempotencyKey ? { idempotencyKey } : undefined,
     );
   }
 
   async forward(
     options: ForwardInboxThreadEmailOptions,
   ): Promise<ForwardInboxThreadEmailResponse> {
-    const { inboxId, threadId, emailId, to, html, text, subject } = options;
+    const {
+      inboxId,
+      threadId,
+      emailId,
+      to,
+      html,
+      text,
+      subject,
+      idempotencyKey,
+    } = options;
     return this.resend.post(
       `${threadEmailPath(inboxId, threadId, emailId)}/forward`,
       withoutUndefined({ to, html, text, subject }),
+      idempotencyKey ? { idempotencyKey } : undefined,
     );
   }
 }
@@ -290,10 +302,12 @@ class InboxDraftsClient {
   async send({
     inboxId,
     draftId,
+    idempotencyKey,
   }: SendInboxDraftOptions): Promise<SendInboxDraftResponse> {
     return this.resend.post(
       `${inboxPath(inboxId)}/drafts/${segment(draftId)}/send`,
       {},
+      idempotencyKey ? { idempotencyKey } : undefined,
     );
   }
 }
