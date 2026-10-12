@@ -28,6 +28,7 @@ const MAX_INBOX_LABEL_NAME_LENGTH = 64;
 const MAX_INBOX_AGENT_INSTRUCTIONS_LENGTH = 4000;
 const MAX_INBOX_AGENT_TONE_LENGTH = 64;
 const MAX_THREAD_LABEL_IDS = 10;
+const MAX_THREAD_FILTER_LABELS = 50;
 const MAX_INBOX_ATTACHMENTS = 10;
 
 function asArray<T>(value: T | T[] | undefined): T[] | undefined {
@@ -266,10 +267,13 @@ const INBOX_THREAD_FILTER_INPUTS = {
       'Only return threads in any of these folders. Pass one folder, or an array to match several. Default: inbox, or inbox, archive and sent once "labels" is passed. "spam" and "trash" are only included when named here.',
     ),
   labels: z
-    .union([z.string().nonempty(), z.string().nonempty().array().min(1)])
+    .union([
+      z.string().nonempty(),
+      z.string().nonempty().array().min(1).max(MAX_THREAD_FILTER_LABELS),
+    ])
     .optional()
     .describe(
-      'Only return threads carrying any of these labels. Pass one label ID, or an array of label IDs to match several. Use list-inbox-labels to find label IDs.',
+      `Only return threads carrying any of these labels. Pass one label ID, or an array of up to ${MAX_THREAD_FILTER_LABELS} label IDs to match several. Use list-inbox-labels to find label IDs.`,
     ),
   read: z
     .boolean()

@@ -898,6 +898,20 @@ describe('inbox tools', () => {
     expect(text).not.toContain('Pass before=');
   });
 
+  it('list-inbox-threads caps the label filter at 50 IDs', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'list-inbox-threads',
+      arguments: {
+        inboxId: INBOX_ID,
+        labels: Array.from({ length: 51 }, (_, i) => `label_${i}`),
+      },
+    });
+
+    expect(listInboxThreads).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
   it('list-inbox-threads says when an inbox holds no threads', async () => {
     listInboxThreads.mockResolvedValue({
       data: { object: 'list', has_more: false, data: [] },
