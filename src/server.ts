@@ -2,7 +2,6 @@ import { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import packageJson from '../package.json' with { type: 'json' };
 import { DashboardClient } from './lib/dashboard-client.js';
-import { InboxesClient } from './lib/inboxes-client.js';
 import { ResendEditorClient } from './lib/resend-editor-client.js';
 import {
   addApiKeyTools,
@@ -46,7 +45,6 @@ export function createMcpServer(
 
   const dashboard = new DashboardClient();
   const apiClient = new ResendEditorClient(apiKey);
-  const inboxesClient = new InboxesClient(resend);
 
   const { withEditorSession } = addEditorTools(server, dashboard, apiClient);
   addApiKeyTools(server, resend);
@@ -66,7 +64,7 @@ export function createMcpServer(
     allowedFileDirs,
   });
   addEventTools(server, resend);
-  addInboxTools(server, inboxesClient);
+  addInboxTools(server, resend);
   addLogTools(server, resend);
   addOAuthGrantTools(server, resend);
   addSegmentTools(server, resend);
