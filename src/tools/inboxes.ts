@@ -473,6 +473,13 @@ const UPDATE_INBOX_THREAD_TOOL = {
       ),
     addLabelIds: threadLabelIdsInput('apply to'),
     removeLabelIds: threadLabelIdsInput('take off'),
+    labelId: z
+      .string()
+      .nonempty()
+      .optional()
+      .describe(
+        'Deprecated. Use addLabelIds instead. Applies this label to the thread, the same as one entry in addLabelIds.',
+      ),
   }),
 } as const;
 
@@ -1721,12 +1728,14 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       folder,
       addLabelIds,
       removeLabelIds,
+      labelId,
     }) => {
       if (
         read === undefined &&
         folder === undefined &&
         addLabelIds === undefined &&
-        removeLabelIds === undefined
+        removeLabelIds === undefined &&
+        labelId === undefined
       ) {
         throw new Error(
           'You must provide `read`, `folder`, `addLabelIds`, or `removeLabelIds` to update a thread.',
@@ -1740,6 +1749,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         folder,
         addLabelIds: asArray(addLabelIds),
         removeLabelIds: asArray(removeLabelIds),
+        labelId,
       } as UpdateInboxThreadOptions);
 
       throwIfResendFailed(response, 'Failed to update inbox thread');
