@@ -1,7 +1,10 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addContactImportTools } from '../../src/tools/contactImports.js';
 
 const create = vi.fn();
@@ -12,9 +15,9 @@ const resend = {
   contacts: { imports: { create, get, list } },
 } as unknown as Resend;
 
-async function makeClient() {
+async function makeClient(options: { allowedFileDirs?: string[] } = {}) {
   const server = new McpServer({ name: 'test', version: '0.0.0' });
-  addContactImportTools(server, resend);
+  addContactImportTools(server, resend, options);
   const client = new Client({ name: 'test-client', version: '0.0.0' });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
@@ -229,5 +232,81 @@ describe('list-contact-imports', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain('Cannot use both');
     expect(list).not.toHaveBeenCalled();
+  });
+});
+
+describe('create-contact-import local file source', () => {
+  let root: string;
+  let allowed: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    create.mockResolvedValue({
+      data: { object: 'contact_import', id: 'imp_1' },
+    });
+    root = await mkdtemp(join(tmpdir(), 'contact-import-'));
+    allowed = join(root, 'allowed');
+    outside = join(root, 'outside');
+    await mkdir(allowed);
+    await mkdir(outside);
+    await writeFile(join(allowed, 'contacts.csv'), 'email\na@b.com');
+    await writeFile(join(outside, 'secret.csv'), 'email\nsecret@b.com');
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  function importFile(client: Client, filePath: string) {
+    return client.callTool({
+      name: 'create-contact-import',
+      arguments: { filePath },
+    });
+  }
+
+  it('uploads files inside an allowed directory', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await importFile(client, join(allowed, 'contacts.csv'));
+
+    expect(result.isError).toBeFalsy();
+    expect(await create.mock.calls[0][0].file.text()).toBe('email\na@b.com');
+  });
+
+  it('uploads any file when no allow-list is configured', async () => {
+    const client = await makeClient();
+    const result = await importFile(client, join(outside, 'secret.csv'));
+
+    expect(result.isError).toBeFalsy();
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses files outside the allowed directories', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await importFile(client, join(outside, 'secret.csv'));
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('outside the allowed');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('refuses path traversal out of the allowed directory', async () => {
+    const client = await makeClient({ allowedFileDirs: [allowed] });
+    const result = await importFile(
+      client,
+      join(allowed, '..', 'outside', 'secret.csv'),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('refuses every local file when the allow-list is empty', async () => {
+    const client = await makeClient({ allowedFileDirs: [] });
+    const result = await importFile(client, join(allowed, 'contacts.csv'));
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('Local file access is disabled');
+    expect(create).not.toHaveBeenCalled();
   });
 });

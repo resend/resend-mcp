@@ -22,6 +22,7 @@ import {
   addSuppressionTools,
   addTemplateTools,
   addTopicTools,
+  addUsageTools,
   addWebhookTools,
 } from './tools/index.js';
 import type { ServerOptions } from './types.js';
@@ -33,7 +34,11 @@ export function createMcpServer(
   options: ServerOptions,
   apiKey: string,
 ): McpServer {
-  const { senderEmailAddress, replierEmailAddresses = [] } = options;
+  const {
+    senderEmailAddress,
+    replierEmailAddresses = [],
+    allowedFileDirs,
+  } = options;
   const server = new McpServer({
     name: 'resend',
     version: packageJson.version,
@@ -51,11 +56,15 @@ export function createMcpServer(
     replierEmailAddresses,
     withEditorSession,
   });
-  addContactImportTools(server, resend);
+  addContactImportTools(server, resend, { allowedFileDirs });
   addContactPropertyTools(server, resend);
   addContactTools(server, resend);
   addDomainTools(server, resend);
-  addEmailTools(server, resend, { senderEmailAddress, replierEmailAddresses });
+  addEmailTools(server, resend, {
+    senderEmailAddress,
+    replierEmailAddresses,
+    allowedFileDirs,
+  });
   addEventTools(server, resend);
   addInboxTools(server, inboxesClient);
   addLogTools(server, resend);
@@ -64,6 +73,7 @@ export function createMcpServer(
   addSuppressionTools(server, resend);
   addTemplateTools(server, resend, apiClient, { withEditorSession });
   addTopicTools(server, resend);
+  addUsageTools(server, resend);
   addWebhookTools(server, resend);
   return server;
 }

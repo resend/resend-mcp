@@ -4,6 +4,8 @@ import type { Resend } from 'resend';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addWebhookTools } from '../../src/tools/webhooks.js';
 
+const createWebhook = vi.fn();
+const updateWebhook = vi.fn();
 const listEvents = vi.fn();
 const getEvent = vi.fn();
 const replayEvent = vi.fn();
@@ -12,10 +14,10 @@ const listAttempts = vi.fn();
 
 const resend = {
   webhooks: {
-    create: vi.fn(),
+    create: createWebhook,
     list: vi.fn(),
     get: vi.fn(),
-    update: vi.fn(),
+    update: updateWebhook,
     remove: vi.fn(),
     rotateSigningSecret,
     events: {
@@ -223,6 +225,87 @@ describe('webhook event tools', () => {
     const text = textOf(result as never);
     expect(text).toContain('500');
     expect(text).toContain('Internal Server Error');
+  });
+
+  it('create-webhook accepts the topic and contact.topics.updated events', async () => {
+    createWebhook.mockResolvedValue({
+      data: { object: 'webhook', id: WEBHOOK_ID, signing_secret: 'whsec_new' },
+      error: null,
+    });
+    const events = [
+      'contact.topics.updated',
+      'topic.created',
+      'topic.updated',
+      'topic.deleted',
+    ];
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-webhook',
+      arguments: { endpoint: 'https://example.com/webhooks', events },
+    });
+
+    expect(createWebhook).toHaveBeenCalledWith({
+      endpoint: 'https://example.com/webhooks',
+      events,
+    });
+    expect(textOf(result as never)).toContain(WEBHOOK_ID);
+  });
+
+  it('create-webhook accepts the inbox events', async () => {
+    createWebhook.mockResolvedValue({
+      data: { object: 'webhook', id: WEBHOOK_ID, signing_secret: 'whsec_new' },
+      error: null,
+    });
+    const events = [
+      'inbox.created',
+      'inbox.updated',
+      'inbox.deleted',
+      'inbox.thread.created',
+      'inbox.email.received',
+      'inbox.email.sent',
+      'inbox.thread.folder.updated',
+      'inbox.thread.assigned',
+      'inbox.thread.unassigned',
+      'inbox.thread.labels.updated',
+      'inbox.draft.created',
+      'inbox.draft.updated',
+      'inbox.draft.sent',
+      'inbox.draft.deleted',
+    ];
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-webhook',
+      arguments: { endpoint: 'https://example.com/webhooks', events },
+    });
+
+    expect(createWebhook).toHaveBeenCalledWith({
+      endpoint: 'https://example.com/webhooks',
+      events,
+    });
+    expect(textOf(result as never)).toContain(WEBHOOK_ID);
+  });
+
+  it('update-webhook accepts inbox events', async () => {
+    updateWebhook.mockResolvedValue({
+      data: { object: 'webhook', id: WEBHOOK_ID },
+      error: null,
+    });
+    const events = ['inbox.email.received', 'inbox.thread.created'];
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'update-webhook',
+      arguments: { webhookId: WEBHOOK_ID, events },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(updateWebhook).toHaveBeenCalledWith(WEBHOOK_ID, {
+      endpoint: undefined,
+      events,
+      status: undefined,
+    });
   });
 
   it('surfaces the API error when a list fails', async () => {
