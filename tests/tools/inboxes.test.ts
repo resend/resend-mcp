@@ -2846,6 +2846,61 @@ describe('inbox tools', () => {
     expect(textOf(result as never)).toContain('Failed to remove inbox draft');
   });
 
+  it.each([
+    [
+      'reply-to-inbox-thread-email',
+      replyToInboxThreadEmail,
+      {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'On it.',
+      },
+    ],
+    [
+      'forward-inbox-thread-email',
+      forwardInboxThreadEmail,
+      {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        to: 'teammate@example.com',
+      },
+    ],
+    [
+      'send-inbox-draft',
+      sendInboxDraft,
+      { inboxId: INBOX_ID, draftId: DRAFT_ID },
+    ],
+  ])('%s passes custom headers to the SDK', async (name, rpc, args) => {
+    rpc.mockResolvedValue({ data: { id: SENT_EMAIL_ID }, error: null });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name,
+      arguments: { ...args, headers: { 'X-Ticket-Id': '4821' } },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(rpc).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { 'X-Ticket-Id': '4821' } }),
+      { idempotencyKey: undefined },
+    );
+  });
+
+  it('create-inbox-draft and update-inbox-draft take no headers', async () => {
+    const client = await makeClient();
+    const { tools } = await client.listTools();
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+
+    expect(
+      byName['create-inbox-draft']?.inputSchema.properties,
+    ).not.toHaveProperty('headers');
+    expect(
+      byName['update-inbox-draft']?.inputSchema.properties,
+    ).not.toHaveProperty('headers');
+  });
+
   it('send-inbox-draft returns the sent email id', async () => {
     sendInboxDraft.mockResolvedValue({
       data: { id: SENT_EMAIL_ID },

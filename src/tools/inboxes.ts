@@ -89,6 +89,15 @@ function inboxAttachmentsInput(limitNote: string) {
     );
 }
 
+function inboxHeadersInput() {
+  return z
+    .record(z.string(), z.string())
+    .optional()
+    .describe(
+      'Optional custom email headers as key/value pairs (e.g. {"X-Entity-Ref-ID": "unique-id"}). In-Reply-To, References and Reply-To are reserved: Resend sets them, and passing any of them, in any letter case, fails.',
+    );
+}
+
 function inboxDraftAttachmentsInput(note: string) {
   return z
     .object({
@@ -647,6 +656,7 @@ const REPLY_TO_INBOX_THREAD_EMAIL_TOOL = {
     attachments: inboxAttachmentsInput(
       'Up to 10 files. The content of all files can total at most 25 MB. A url file counts toward the 10 files only, because it is fetched when the email is sent.',
     ),
+    headers: inboxHeadersInput(),
     idempotencyKey: z
       .string()
       .min(1)
@@ -722,6 +732,7 @@ const FORWARD_INBOX_THREAD_EMAIL_TOOL = {
     attachments: inboxAttachmentsInput(
       'The forward also sends the attachments of the original message, and they share one limit: up to 10 files and at most 25 MB of content together. A url file counts toward the 10 files only, because it is fetched when the email is sent.',
     ),
+    headers: inboxHeadersInput(),
     idempotencyKey: z
       .string()
       .min(1)
@@ -1058,6 +1069,7 @@ const SEND_INBOX_DRAFT_TOOL = {
       .string()
       .nonempty()
       .describe('Draft ID. Use list-inbox-drafts to find draft IDs.'),
+    headers: inboxHeadersInput(),
     idempotencyKey: z
       .string()
       .min(1)
@@ -1117,6 +1129,7 @@ const SEND_NEW_INBOX_EMAIL_TOOL = {
       .describe(
         'HTML body of the email. Provide html, text, or both; one of the two is required.',
       ),
+    headers: inboxHeadersInput(),
     idempotencyKey: z
       .string()
       .min(1)
@@ -1956,6 +1969,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       bcc,
       replyAll,
       attachments,
+      headers,
       idempotencyKey,
     }) => {
       if (html === undefined && text === undefined) {
@@ -1976,6 +1990,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
           bcc,
           replyAll,
           attachments: inboxAttachments(attachments),
+          headers,
         } as ReplyInboxThreadEmailOptions,
         { idempotencyKey },
       );
@@ -2006,6 +2021,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       text,
       subject,
       attachments,
+      headers,
       idempotencyKey,
     }) => {
       const response = await resend.inboxes.threads.emails.forward(
@@ -2020,6 +2036,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
           text,
           subject,
           attachments: inboxAttachments(attachments),
+          headers,
         },
         { idempotencyKey },
       );
@@ -2366,9 +2383,9 @@ export function addInboxTools(server: McpServer, resend: Resend) {
   server.registerTool(
     'send-inbox-draft',
     SEND_INBOX_DRAFT_TOOL,
-    async ({ inboxId, draftId, idempotencyKey }) => {
+    async ({ inboxId, draftId, headers, idempotencyKey }) => {
       const response = await resend.inboxes.drafts.send(
-        { inboxId, draftId },
+        { inboxId, draftId, headers },
         { idempotencyKey },
       );
 
@@ -2393,7 +2410,17 @@ export function addInboxTools(server: McpServer, resend: Resend) {
   server.registerTool(
     'send-new-inbox-email',
     SEND_NEW_INBOX_EMAIL_TOOL,
-    async ({ inboxId, to, cc, bcc, subject, text, html, idempotencyKey }) => {
+    async ({
+      inboxId,
+      to,
+      cc,
+      bcc,
+      subject,
+      text,
+      html,
+      headers,
+      idempotencyKey,
+    }) => {
       if (html === undefined && text === undefined) {
         throw new Error('You must provide `html` or `text` to send an email.');
       }
@@ -2408,7 +2435,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       throwIfResendFailed(draft, 'Failed to create the email in the inbox');
 
       const sent = await resend.inboxes.drafts.send(
-        { inboxId, draftId: draft.data.id },
+        { inboxId, draftId: draft.data.id, headers },
         { idempotencyKey },
       );
 
