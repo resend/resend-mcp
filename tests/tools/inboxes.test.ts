@@ -2421,6 +2421,29 @@ describe('inbox tools', () => {
     );
   });
 
+  it('create-inbox-draft sets no file-count limit on attachments', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const files = Array.from({ length: 11 }, (_, i) => ({
+      filename: `file-${i}.txt`,
+      content: 'aGVsbG8=',
+      contentType: 'text/plain',
+    }));
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: { inboxId: INBOX_ID, attachments: files },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ attachments: files }),
+    );
+  });
+
   it('create-inbox-draft refuses an empty attachments array as the only content', async () => {
     const client = await makeClient();
     const result = await client.callTool({
