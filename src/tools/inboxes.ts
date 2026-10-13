@@ -928,6 +928,14 @@ const CREATE_INBOX_DRAFT_TOOL = {
     attachments: inboxDraftAttachmentsInput(
       'They are sent with the draft when send-inbox-draft is called.',
     ),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        'Optional unique key that prevents duplicate drafts on retries (sent as the Idempotency-Key header). Use the same key when retrying the same logical draft; use a new key for a different draft. Must be 1-256 characters.',
+      ),
   }),
 } as const;
 
@@ -2137,6 +2145,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       threadId,
       replyToEmailId,
       attachments,
+      idempotencyKey,
     }) => {
       const isReplyDraft =
         threadId !== undefined && replyToEmailId !== undefined;
@@ -2166,18 +2175,21 @@ export function addInboxTools(server: McpServer, resend: Resend) {
 
       throwIfTooManyInboxDraftRecipients(to, cc, bcc);
 
-      const response = await resend.inboxes.drafts.create({
-        inboxId,
-        to,
-        cc,
-        bcc,
-        subject,
-        text,
-        html,
-        threadId,
-        replyToEmailId,
-        attachments,
-      } as CreateInboxDraftOptions);
+      const response = await resend.inboxes.drafts.create(
+        {
+          inboxId,
+          to,
+          cc,
+          bcc,
+          subject,
+          text,
+          html,
+          threadId,
+          replyToEmailId,
+          attachments,
+        } as CreateInboxDraftOptions,
+        { idempotencyKey },
+      );
 
       throwIfResendFailed(response, 'Failed to create inbox draft');
 

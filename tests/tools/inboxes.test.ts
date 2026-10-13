@@ -2352,17 +2352,20 @@ describe('inbox tools', () => {
       },
     });
 
-    expect(createInboxDraft).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
-      to: 'customer@example.com',
-      cc: ['billing@example.com'],
-      bcc: undefined,
-      subject: 'Re: Refund request',
-      text: undefined,
-      html: '<p>Your refund is on its way</p>',
-      threadId: THREAD_ID,
-      replyToEmailId: EMAIL_ID,
-    });
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      {
+        inboxId: INBOX_ID,
+        to: 'customer@example.com',
+        cc: ['billing@example.com'],
+        bcc: undefined,
+        subject: 'Re: Refund request',
+        text: undefined,
+        html: '<p>Your refund is on its way</p>',
+        threadId: THREAD_ID,
+        replyToEmailId: EMAIL_ID,
+      },
+      { idempotencyKey: undefined },
+    );
     const text = textOf(result as never);
     expect(text).toContain('Draft created successfully.');
     expect(text).toContain('Nothing has been sent');
@@ -2385,17 +2388,20 @@ describe('inbox tools', () => {
       },
     });
 
-    expect(createInboxDraft).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
-      to: 'customer@example.com',
-      cc: undefined,
-      bcc: undefined,
-      subject: 'Following up',
-      text: undefined,
-      html: undefined,
-      threadId: undefined,
-      replyToEmailId: undefined,
-    });
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      {
+        inboxId: INBOX_ID,
+        to: 'customer@example.com',
+        cc: undefined,
+        bcc: undefined,
+        subject: 'Following up',
+        text: undefined,
+        html: undefined,
+        threadId: undefined,
+        replyToEmailId: undefined,
+      },
+      { idempotencyKey: undefined },
+    );
     expect(result.isError).toBeFalsy();
     expect(textOf(result as never)).toContain(`ID: ${DRAFT_ID}`);
   });
@@ -2418,6 +2424,7 @@ describe('inbox tools', () => {
     expect(result.isError).toBeFalsy();
     expect(createInboxDraft).toHaveBeenCalledWith(
       expect.objectContaining({ inboxId: INBOX_ID, attachments: files }),
+      { idempotencyKey: undefined },
     );
   });
 
@@ -2441,6 +2448,7 @@ describe('inbox tools', () => {
     expect(result.isError).toBeFalsy();
     expect(createInboxDraft).toHaveBeenCalledWith(
       expect.objectContaining({ attachments: files }),
+      { idempotencyKey: undefined },
     );
   });
 
@@ -3239,6 +3247,10 @@ describe('inbox sending idempotency key', () => {
       data: { id: SENT_EMAIL_ID },
       error: null,
     });
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
   });
 
   it.each([
@@ -3266,6 +3278,11 @@ describe('inbox sending idempotency key', () => {
       'send-inbox-draft',
       sendInboxDraft,
       { inboxId: INBOX_ID, draftId: DRAFT_ID },
+    ],
+    [
+      'create-inbox-draft',
+      createInboxDraft,
+      { inboxId: INBOX_ID, subject: 'Quote' },
     ],
   ])('%s rejects an empty idempotencyKey before calling the client', async (name, rpc, args) => {
     const client = await makeClient();
@@ -3313,6 +3330,23 @@ describe('inbox sending idempotency key', () => {
     expect(result.isError).toBeFalsy();
     expect(forwardInboxThreadEmail).toHaveBeenCalledWith(expect.anything(), {
       idempotencyKey: 'forward/123456789',
+    });
+  });
+
+  it('create-inbox-draft passes idempotencyKey to the client', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        subject: 'Quote',
+        idempotencyKey: 'create-draft/123456789',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(createInboxDraft).toHaveBeenCalledWith(expect.anything(), {
+      idempotencyKey: 'create-draft/123456789',
     });
   });
 
