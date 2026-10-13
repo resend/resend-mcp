@@ -89,6 +89,27 @@ function inboxAttachmentsInput(limitNote: string) {
     );
 }
 
+function inboxDraftAttachmentsInput(note: string) {
+  return z
+    .object({
+      filename: z
+        .string()
+        .nonempty()
+        .describe('Name of the file with extension (e.g. "quote.pdf").'),
+      content: z.string().nonempty().describe('Base64-encoded file content.'),
+      contentType: z
+        .string()
+        .nonempty()
+        .describe('MIME type of the file (e.g. "application/pdf").'),
+    })
+    .array()
+    .max(MAX_INBOX_ATTACHMENTS)
+    .optional()
+    .describe(
+      `Files to store on the draft. Each one needs filename, base64 content and contentType; a draft cannot attach a file by URL. A draft can carry up to ${MAX_INBOX_ATTACHMENTS} files and 25 MB in total. ${note}`,
+    );
+}
+
 type InboxAttachmentInput = {
   filename: string;
   content?: string;
@@ -857,7 +878,7 @@ const CREATE_INBOX_DRAFT_TOOL = {
     destructiveHint: false,
   },
   title: 'Create Inbox Draft',
-  description: `**Purpose:** Create a draft in a Resend inbox: a message saved for later, NOT sent. At least one of to, cc, bcc, subject, text, or html is required. Nothing leaves the account until send-inbox-draft is called on it.
+  description: `**Purpose:** Create a draft in a Resend inbox: a message saved for later, NOT sent. At least one of to, cc, bcc, subject, text, html, or attachments is required. Nothing leaves the account until send-inbox-draft is called on it.
 
 **NOT for:** Sending mail. To send straight away, use reply-to-inbox-thread-email to answer a thread, forward-inbox-thread-email to pass a message along, or send-email for an unrelated message.
 
@@ -905,6 +926,9 @@ const CREATE_INBOX_DRAFT_TOOL = {
       .describe(
         'ID of the message in that thread this draft replies to, the "Email ID" get-inbox-thread prints for it. Must be provided together with threadId.',
       ),
+    attachments: inboxDraftAttachmentsInput(
+      'They are sent with the draft when send-inbox-draft is called.',
+    ),
   }),
 } as const;
 
@@ -915,7 +939,7 @@ const GET_INBOX_DRAFT_TOOL = {
     destructiveHint: false,
   },
   title: 'Get Inbox Draft',
-  description: `Get a draft by ID from a Resend inbox, body included: its recipients, subject, html and text, and the thread and message it replies to if it is a reply. A draft is one message being composed, so its body is returned here, unlike get-inbox-thread, which lists a whole conversation without the bodies. Use this to read a draft back before send-inbox-draft puts it in the mail. Get the draft ID from list-inbox-drafts.`,
+  description: `Get a draft by ID from a Resend inbox, body included: its recipients, subject, html and text, the files it carries, and the thread and message it replies to if it is a reply. A draft is one message being composed, so its body is returned here, unlike get-inbox-thread, which lists a whole conversation without the bodies. Use this to read a draft back before send-inbox-draft puts it in the mail. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
     inboxId: z.string().nonempty().describe('Inbox ID'),
     draftId: z
@@ -932,11 +956,11 @@ const UPDATE_INBOX_DRAFT_TOOL = {
     destructiveHint: false,
   },
   title: 'Update Inbox Draft',
-  description: `**Purpose:** Update a draft in a Resend inbox: change its recipients, its subject, or its body. At least one of to, cc, bcc, subject, text, or html is required. This still sends nothing: the draft only goes out when send-inbox-draft is called.
+  description: `**Purpose:** Update a draft in a Resend inbox: change its recipients, its subject, its body, or its attachments. At least one of to, cc, bcc, subject, text, html, or attachments is required. This still sends nothing: the draft only goes out when send-inbox-draft is called.
 
 **NOT for:** Changing which thread or message a draft replies to. Those are fixed when the draft is created. Not for editing a message already sent: sent mail cannot be changed.
 
-**Returns:** The draft's id, type, recipients, subject, the thread and message it replies to if any, and its timestamps after the update.
+**Returns:** The draft's id, type, recipients, subject, attachments, the thread and message it replies to if any, and its timestamps after the update.
 
 **When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it, which is the only way to empty one. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
@@ -990,6 +1014,9 @@ const UPDATE_INBOX_DRAFT_TOOL = {
       .describe(
         'New HTML body for the draft. Pass null to clear the HTML body; omit to leave it untouched.',
       ),
+    attachments: inboxDraftAttachmentsInput(
+      'Passing attachments replaces every file on the draft; pass an empty array to remove them all, or omit to keep them.',
+    ),
   }),
 } as const;
 
@@ -1291,9 +1318,7 @@ function throwIfTooManyInboxDraftRecipients(
  * The API counts a draft field as provided whenever its key is present, so an
  * explicit `null` (which clears that field) satisfies its at-least-one rule.
  */
-function isAnyInboxDraftContentProvided(
-  ...contentFields: Array<string | string[] | null | undefined>
-) {
+function isAnyInboxDraftContentProvided(...contentFields: unknown[]) {
   return contentFields.some((field) => field !== undefined);
 }
 
@@ -1327,6 +1352,15 @@ function inboxDraftText(draft: InboxDraft) {
   return [
     ...inboxDraftSummaryLines(draft),
     draft.email_id != null && `Sent email ID: ${draft.email_id}`,
+    draft.attachments.length === 0
+      ? 'Attachments: none'
+      : [
+          `Attachments (${draft.attachments.length}):`,
+          ...draft.attachments.map(
+            ({ id, filename, content_type, size }) =>
+              `- ${filename} (${content_type}, ${size} bytes), ID: ${id}`,
+          ),
+        ].join('\n'),
     `Created at: ${draft.created_at}`,
     `Updated at: ${draft.updated_at}`,
   ]
@@ -2068,6 +2102,8 @@ export function addInboxTools(server: McpServer, resend: Resend) {
             text: [
               ...inboxDraftSummaryLines(draft),
               draft.snippet != null && `Snippet: ${draft.snippet}`,
+              draft.attachments.length > 0 &&
+                `Attachments: ${draft.attachments.length}`,
               `Updated at: ${draft.updated_at}`,
             ]
               .filter(Boolean)
@@ -2101,6 +2137,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       html,
       threadId,
       replyToEmailId,
+      attachments,
     }) => {
       const isReplyDraft =
         threadId !== undefined && replyToEmailId !== undefined;
@@ -2112,9 +2149,19 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         );
       }
 
-      if (!isAnyInboxDraftContentProvided(to, cc, bcc, subject, text, html)) {
+      if (
+        !isAnyInboxDraftContentProvided(
+          to,
+          cc,
+          bcc,
+          subject,
+          text,
+          html,
+          attachments?.length ? attachments : undefined,
+        )
+      ) {
         throw new Error(
-          'You must provide `to`, `cc`, `bcc`, `subject`, `text`, or `html` to create a draft.',
+          'You must provide `to`, `cc`, `bcc`, `subject`, `text`, `html`, or `attachments` to create a draft.',
         );
       }
 
@@ -2130,6 +2177,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         html,
         threadId,
         replyToEmailId,
+        attachments,
       } as CreateInboxDraftOptions);
 
       throwIfResendFailed(response, 'Failed to create inbox draft');
@@ -2170,10 +2218,30 @@ export function addInboxTools(server: McpServer, resend: Resend) {
   server.registerTool(
     'update-inbox-draft',
     UPDATE_INBOX_DRAFT_TOOL,
-    async ({ inboxId, draftId, to, cc, bcc, subject, text, html }) => {
-      if (!isAnyInboxDraftContentProvided(to, cc, bcc, subject, text, html)) {
+    async ({
+      inboxId,
+      draftId,
+      to,
+      cc,
+      bcc,
+      subject,
+      text,
+      html,
+      attachments,
+    }) => {
+      if (
+        !isAnyInboxDraftContentProvided(
+          to,
+          cc,
+          bcc,
+          subject,
+          text,
+          html,
+          attachments,
+        )
+      ) {
         throw new Error(
-          'You must provide `to`, `cc`, `bcc`, `subject`, `text`, or `html` to update a draft. Pass null for a field to clear it.',
+          'You must provide `to`, `cc`, `bcc`, `subject`, `text`, `html`, or `attachments` to update a draft. Pass null for a field to clear it.',
         );
       }
 
@@ -2188,6 +2256,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         subject,
         text,
         html,
+        attachments,
       } as UpdateInboxDraftOptions);
 
       throwIfResendFailed(response, 'Failed to update inbox draft');

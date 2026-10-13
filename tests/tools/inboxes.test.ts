@@ -103,6 +103,13 @@ const INBOUND_MESSAGE = {
   received_at: '2026-09-10T08:15:00.000Z',
 };
 
+const ATTACHMENT = {
+  id: '3f1d2c4b-5a69-4e7f-8b0c-1d2e3f4a5b6c',
+  filename: 'quote.txt',
+  content_type: 'text/plain',
+  size: 5,
+};
+
 const REPLY_DRAFT = {
   object: 'inbox_draft',
   id: DRAFT_ID,
@@ -118,6 +125,7 @@ const REPLY_DRAFT = {
   email_id: null,
   created_at: '2026-09-11T09:00:00.000Z',
   updated_at: '2026-09-11T09:30:00.000Z',
+  attachments: [],
 };
 
 function addresses(count: number, prefix: string) {
@@ -2176,6 +2184,7 @@ describe('inbox tools', () => {
             thread_id: THREAD_ID,
             reply_to_email_id: EMAIL_ID,
             updated_at: '2026-09-11T09:30:00.000Z',
+            attachments: [ATTACHMENT],
           },
         ],
       },
@@ -2203,6 +2212,7 @@ describe('inbox tools', () => {
     expect(text).toContain('Snippet: Your refund is on its way');
     expect(text).toContain(`Thread ID: ${THREAD_ID}`);
     expect(text).toContain(`after=${DRAFT_ID}`);
+    expect(text).toContain('Attachments: 1');
   });
 
   it('list-inbox-drafts points at the first id when paginating with before', async () => {
@@ -2216,6 +2226,7 @@ describe('inbox tools', () => {
       thread_id: null,
       reply_to_email_id: null,
       updated_at: '2026-09-11T09:30:00.000Z',
+      attachments: [],
     };
     listInboxDrafts.mockResolvedValue({
       data: {
@@ -2257,6 +2268,7 @@ describe('inbox tools', () => {
             thread_id: null,
             reply_to_email_id: null,
             updated_at: '2026-09-11T09:30:00.000Z',
+            attachments: [],
           },
         ],
       },
@@ -2388,6 +2400,53 @@ describe('inbox tools', () => {
     expect(textOf(result as never)).toContain(`ID: ${DRAFT_ID}`);
   });
 
+  it('create-inbox-draft stores attachments, which count as content', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const files = [
+      { filename: 'quote.txt', content: 'aGVsbG8=', contentType: 'text/plain' },
+    ];
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: { inboxId: INBOX_ID, attachments: files },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ inboxId: INBOX_ID, attachments: files }),
+    );
+  });
+
+  it('create-inbox-draft refuses an empty attachments array as the only content', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: { inboxId: INBOX_ID, attachments: [] },
+    });
+
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it('create-inbox-draft refuses an attachment without a content type', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        subject: 'Quote',
+        attachments: [{ filename: 'quote.txt', content: 'aGVsbG8=' }],
+      },
+    });
+
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
   it('create-inbox-draft refuses a threadId without a replyToEmailId', async () => {
     const client = await makeClient();
     const result = await client.callTool({
@@ -2474,7 +2533,7 @@ describe('inbox tools', () => {
     expect(createInboxDraft).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
-      'You must provide `to`, `cc`, `bcc`, `subject`, `text`, or `html` to create a draft.',
+      'You must provide `to`, `cc`, `bcc`, `subject`, `text`, `html`, or `attachments` to create a draft.',
     );
   });
 
@@ -2519,7 +2578,28 @@ describe('inbox tools', () => {
     expect(text).toContain('Updated at: 2026-09-11T09:30:00.000Z');
     expect(text).toContain('Your refund is on its way');
     expect(text).toContain('<p>Your refund is on its way</p>');
+    expect(text).toContain('Attachments: none');
     expect(text).not.toContain('Sent email ID');
+  });
+
+  it('get-inbox-draft lists the files the draft carries', async () => {
+    getInboxDraft.mockResolvedValue({
+      data: {
+        ...REPLY_DRAFT,
+        attachments: [ATTACHMENT],
+      },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID },
+    });
+
+    expect(textOf(result as never)).toContain(
+      `Attachments (1):\n- quote.txt (text/plain, 5 bytes), ID: ${ATTACHMENT.id}`,
+    );
   });
 
   it('get-inbox-draft says so when a draft has no body yet', async () => {
@@ -2616,6 +2696,31 @@ describe('inbox tools', () => {
     });
   });
 
+  it('update-inbox-draft replaces the attachments, and an empty array removes them', async () => {
+    updateInboxDraft.mockResolvedValue({ data: REPLY_DRAFT, error: null });
+
+    const client = await makeClient();
+    const files = [
+      { filename: 'quote.txt', content: 'aGVsbG8=', contentType: 'text/plain' },
+    ];
+    await client.callTool({
+      name: 'update-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID, attachments: files },
+    });
+    expect(updateInboxDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attachments: files }),
+    );
+
+    const result = await client.callTool({
+      name: 'update-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID, attachments: [] },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(updateInboxDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attachments: [] }),
+    );
+  });
+
   it('update-inbox-draft requires at least one content field', async () => {
     const client = await makeClient();
     const result = await client.callTool({
@@ -2626,7 +2731,7 @@ describe('inbox tools', () => {
     expect(updateInboxDraft).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
-      'You must provide `to`, `cc`, `bcc`, `subject`, `text`, or `html` to update a draft.',
+      'You must provide `to`, `cc`, `bcc`, `subject`, `text`, `html`, or `attachments` to update a draft.',
     );
   });
 
