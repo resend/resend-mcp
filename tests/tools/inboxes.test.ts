@@ -1455,33 +1455,6 @@ describe('inbox tools', () => {
     });
   });
 
-  it('update-inbox-thread still passes the deprecated labelId', async () => {
-    updateInboxThread.mockResolvedValue({
-      data: {
-        object: 'inbox_thread',
-        id: THREAD_ID,
-        subject: 'Refund request',
-        folder: 'inbox',
-        labels: [{ id: LABEL_ID, name: 'Billing', color: '#5B5BD6' }],
-        read: false,
-      },
-      error: null,
-    });
-
-    const client = await makeClient();
-    const result = await client.callTool({
-      name: 'update-inbox-thread',
-      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelId: LABEL_ID },
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(updateInboxThread).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
-      threadId: THREAD_ID,
-      labelId: LABEL_ID,
-    });
-  });
-
   it('update-inbox-thread caps label IDs at 10 per call', async () => {
     const client = await makeClient();
     const result = await client.callTool({

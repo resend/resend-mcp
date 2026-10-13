@@ -430,7 +430,7 @@ const GET_INBOX_THREAD_TOOL = {
   }),
 } as const;
 
-function threadLabelIdsInput(action: string) {
+function threadLabelIdsInput(action: string, note = '') {
   return z
     .union([
       z.string().nonempty(),
@@ -438,7 +438,7 @@ function threadLabelIdsInput(action: string) {
     ])
     .optional()
     .describe(
-      `ID of the label to ${action} this thread, or an array of up to ${MAX_THREAD_LABEL_IDS} label IDs. A label ID cannot be both added and removed in the same call. Use list-inbox-labels to find label IDs.`,
+      `ID of the label to ${action} this thread, or an array of up to ${MAX_THREAD_LABEL_IDS} label IDs.${note} A label ID cannot be both added and removed in the same call. Use list-inbox-labels to find label IDs.`,
     );
 }
 
@@ -472,14 +472,10 @@ const UPDATE_INBOX_THREAD_TOOL = {
         'Folder to move the thread to. Note that "sent" is not a valid destination: a thread can only be moved to inbox, archive, spam, or trash.',
       ),
     addLabelIds: threadLabelIdsInput('apply to'),
-    removeLabelIds: threadLabelIdsInput('take off'),
-    labelId: z
-      .string()
-      .nonempty()
-      .optional()
-      .describe(
-        'Deprecated. Use addLabelIds instead. Applies this label to the thread, the same as one entry in addLabelIds.',
-      ),
+    removeLabelIds: threadLabelIdsInput(
+      'take off',
+      ' The label itself is kept, and stays on every other thread that carries it.',
+    ),
   }),
 } as const;
 
@@ -1728,14 +1724,12 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       folder,
       addLabelIds,
       removeLabelIds,
-      labelId,
     }) => {
       if (
         read === undefined &&
         folder === undefined &&
         addLabelIds === undefined &&
-        removeLabelIds === undefined &&
-        labelId === undefined
+        removeLabelIds === undefined
       ) {
         throw new Error(
           'You must provide `read`, `folder`, `addLabelIds`, or `removeLabelIds` to update a thread.',
@@ -1749,7 +1743,6 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         folder,
         addLabelIds: asArray(addLabelIds),
         removeLabelIds: asArray(removeLabelIds),
-        labelId,
       } as UpdateInboxThreadOptions);
 
       throwIfResendFailed(response, 'Failed to update inbox thread');
