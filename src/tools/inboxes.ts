@@ -63,7 +63,7 @@ function inboxAttachmentsInput(limitNote: string) {
         .url()
         .optional()
         .describe(
-          'URL where the file is hosted. Resend fetches it when the email is sent. Provide content or url.',
+          'URL where the file is hosted. Resend fetches it when the email is sent. It must be an http or https URL that does not point to localhost. Provide content or url.',
         ),
       contentType: z
         .string()
@@ -85,7 +85,7 @@ function inboxAttachmentsInput(limitNote: string) {
     .max(MAX_INBOX_ATTACHMENTS)
     .optional()
     .describe(
-      `Files to attach. Each one needs filename plus content or url. ${limitNote}`,
+      `Files to attach. Each one needs filename plus content or url. An empty file or a blocked file type (such as .exe) is rejected. ${limitNote}`,
     );
 }
 
@@ -94,7 +94,7 @@ function inboxHeadersInput() {
     .record(z.string(), z.string())
     .optional()
     .describe(
-      'Optional custom email headers as key/value pairs (e.g. {"X-Entity-Ref-ID": "unique-id"}). In-Reply-To, References and Reply-To are reserved: Resend sets them, and passing any of them, in any letter case, fails.',
+      'Optional custom email headers as key/value pairs (e.g. {"X-Entity-Ref-ID": "unique-id"}). Header names cannot be empty, and names and values cannot contain line breaks or null characters. In-Reply-To, References and Reply-To are reserved: Resend sets them, and passing any of them, in any letter case, fails.',
     );
 }
 
@@ -112,7 +112,6 @@ function inboxDraftAttachmentsInput(note: string) {
         .describe('MIME type of the file (e.g. "application/pdf").'),
     })
     .array()
-    .optional()
     .describe(
       `Files to store on the draft. Each one needs filename, base64 content and contentType; a draft cannot attach a file by URL. There is no limit on the number of files, but together they can total at most 25 MB. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
     );
@@ -938,7 +937,7 @@ const CREATE_INBOX_DRAFT_TOOL = {
       ),
     attachments: inboxDraftAttachmentsInput(
       'They are sent with the draft when send-inbox-draft is called.',
-    ),
+    ).optional(),
     idempotencyKey: z
       .string()
       .min(1)
@@ -1033,8 +1032,10 @@ const UPDATE_INBOX_DRAFT_TOOL = {
         'New HTML body for the draft. Pass null to clear the HTML body; omit to leave it untouched.',
       ),
     attachments: inboxDraftAttachmentsInput(
-      'Passing attachments replaces every file on the draft; pass an empty array to remove them all, or omit to keep them.',
-    ),
+      'Passing attachments replaces every file on the draft; pass null or an empty array to remove them all, or omit to keep them.',
+    )
+      .nullable()
+      .optional(),
   }),
 } as const;
 

@@ -2729,7 +2729,7 @@ describe('inbox tools', () => {
     });
   });
 
-  it('update-inbox-draft replaces the attachments, and an empty array removes them', async () => {
+  it('update-inbox-draft replaces the attachments, and an empty array or null removes them', async () => {
     updateInboxDraft.mockResolvedValue({ data: REPLY_DRAFT, error: null });
 
     const client = await makeClient();
@@ -2751,6 +2751,15 @@ describe('inbox tools', () => {
     expect(result.isError).toBeFalsy();
     expect(updateInboxDraft).toHaveBeenLastCalledWith(
       expect.objectContaining({ attachments: [] }),
+    );
+
+    const cleared = await client.callTool({
+      name: 'update-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID, attachments: null },
+    });
+    expect(cleared.isError).toBeFalsy();
+    expect(updateInboxDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({ attachments: null }),
     );
   });
 
