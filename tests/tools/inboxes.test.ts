@@ -212,6 +212,7 @@ describe('inbox tools', () => {
       'reply-to-inbox-thread-email',
       'forward-inbox-thread-email',
       'send-inbox-draft',
+      'send-new-inbox-email',
     ]) {
       expect(byName[name]?.annotations?.readOnlyHint).toBe(false);
       expect(byName[name]?.annotations?.destructiveHint).toBe(true);
@@ -219,7 +220,7 @@ describe('inbox tools', () => {
     }
   });
 
-  it('registers one tool per inbox endpoint', async () => {
+  it('registers one tool per inbox endpoint, plus send-new-inbox-email', async () => {
     const client = await makeClient();
     const { tools } = await client.listTools();
 
@@ -251,6 +252,7 @@ describe('inbox tools', () => {
         'update-inbox-draft',
         'remove-inbox-draft',
         'send-inbox-draft',
+        'send-new-inbox-email',
       ].sort(),
     );
   });
@@ -2887,6 +2889,158 @@ describe('inbox tools', () => {
     const text = textOf(result as never);
     expect(text).toContain('Failed to send inbox draft');
     expect(text).toContain('This draft has no recipients');
+  });
+
+  it('send-new-inbox-email creates a standalone draft and sends it, keying both calls', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+    sendInboxDraft.mockResolvedValue({
+      data: { id: SENT_EMAIL_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        to: ['customer@example.com', 'billing@example.com'],
+        cc: 'manager@example.com',
+        subject: 'Your invoice',
+        text: 'Please find your invoice attached.',
+        idempotencyKey: 'invoice-2026-10-13',
+      },
+    });
+
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      {
+        inboxId: INBOX_ID,
+        to: ['customer@example.com', 'billing@example.com'],
+        cc: 'manager@example.com',
+        subject: 'Your invoice',
+        text: 'Please find your invoice attached.',
+      },
+      { idempotencyKey: 'invoice-2026-10-13' },
+    );
+    expect(sendInboxDraft).toHaveBeenCalledWith(
+      { inboxId: INBOX_ID, draftId: DRAFT_ID },
+      { idempotencyKey: 'invoice-2026-10-13' },
+    );
+    expect(result.isError).toBeFalsy();
+    const text = textOf(result as never);
+    expect(text).toContain('started a new thread');
+    expect(text).toContain(`Email ID: ${SENT_EMAIL_ID}`);
+  });
+
+  it('send-new-inbox-email never threads the email as a reply, even when thread fields are passed', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+    sendInboxDraft.mockResolvedValue({
+      data: { id: SENT_EMAIL_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        to: 'customer@example.com',
+        subject: 'Hello',
+        text: 'Hello',
+        threadId: THREAD_ID,
+        replyToEmailId: EMAIL_ID,
+      },
+    });
+
+    expect(createInboxDraft).toHaveBeenCalledTimes(1);
+    expect(createInboxDraft.mock.calls[0]?.[0]).not.toHaveProperty('threadId');
+    expect(createInboxDraft.mock.calls[0]?.[0]).not.toHaveProperty(
+      'replyToEmailId',
+    );
+  });
+
+  it('send-new-inbox-email names the draft to retry when the send fails after the draft exists', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+    sendInboxDraft.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'internal_server_error',
+        statusCode: 500,
+        message: 'Something went wrong',
+      },
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        to: 'customer@example.com',
+        subject: 'Hello',
+        text: 'Hello',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result as never);
+    expect(text).toContain(`draft ${DRAFT_ID}`);
+    expect(text).toContain('send-inbox-draft');
+    expect(text).toContain('Something went wrong');
+  });
+
+  it('send-new-inbox-email requires a subject, which sending a draft needs', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: { inboxId: INBOX_ID, to: 'customer@example.com', text: 'Hi' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(createInboxDraft).not.toHaveBeenCalled();
+  });
+
+  it('send-new-inbox-email refuses an email with neither html nor text before calling the API', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        to: 'customer@example.com',
+        subject: 'Hello',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('`html` or `text`');
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(sendInboxDraft).not.toHaveBeenCalled();
+  });
+
+  it('send-new-inbox-email caps recipients across to, cc, and bcc together', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'send-new-inbox-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        to: addresses(25, 'to'),
+        cc: addresses(25, 'cc'),
+        bcc: addresses(1, 'bcc'),
+        subject: 'Hello',
+        text: 'Hello',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('at most 50 recipients');
+    expect(createInboxDraft).not.toHaveBeenCalled();
   });
 
   it('get-inbox-agent renders the configured settings', async () => {

@@ -591,7 +591,7 @@ const REPLY_TO_INBOX_THREAD_EMAIL_TOOL = {
   title: 'Reply to Inbox Thread Email',
   description: `**Purpose:** Reply to one message in a Resend inbox thread. This sends a real email the moment you call it, from the inbox's address to the author of the message, or to everyone on it with replyAll, plus anyone you add in cc or bcc. At least one of html or text is required.
 
-**NOT for:** Passing the message along to someone new without answering it (use forward-inbox-thread-email), or an unrelated message (use send-email).
+**NOT for:** Passing the message along to someone new without answering it (use forward-inbox-thread-email), or starting a new conversation from the inbox (use send-new-inbox-email).
 
 **Returns:** The sent email's id.
 
@@ -667,7 +667,7 @@ const FORWARD_INBOX_THREAD_EMAIL_TOOL = {
   title: 'Forward Inbox Thread Email',
   description: `**Purpose:** Forward one message from a Resend inbox thread to someone else. This sends a real email the moment you call it, from the inbox's address to the recipients named in "to", "cc" and "bcc".
 
-**NOT for:** Answering the sender (use reply-to-inbox-thread-email, which answers the message's author, or everyone on it with replyAll). Not for composing an unrelated email (use send-email).
+**NOT for:** Answering the sender (use reply-to-inbox-thread-email, which answers the message's author, or everyone on it with replyAll). Not for starting a new conversation from the inbox (use send-new-inbox-email).
 
 **Returns:** The sent email's id.
 
@@ -879,7 +879,7 @@ const CREATE_INBOX_DRAFT_TOOL = {
   title: 'Create Inbox Draft',
   description: `**Purpose:** Create a draft in a Resend inbox: a message saved for later, NOT sent. At least one of to, cc, bcc, subject, text, html, or attachments is required. Nothing leaves the account until send-inbox-draft is called on it.
 
-**NOT for:** Sending mail. To send straight away, use reply-to-inbox-thread-email to answer a thread, forward-inbox-thread-email to pass a message along, or send-email for an unrelated message.
+**NOT for:** Sending mail. To send straight away, use send-new-inbox-email to start a new thread from the inbox, reply-to-inbox-thread-email to answer a thread, or forward-inbox-thread-email to pass a message along.
 
 **Returns:** The draft's id.
 
@@ -1065,6 +1065,65 @@ const SEND_INBOX_DRAFT_TOOL = {
       .optional()
       .describe(
         'Optional unique key that prevents duplicate sends on retries (sent as the Idempotency-Key header). Use the same key when retrying the same logical email; use a new key for a different email. Must be 1-256 characters.',
+      ),
+  }),
+} as const;
+
+const SEND_NEW_INBOX_EMAIL_TOOL = {
+  annotations: {
+    readOnlyHint: false,
+    openWorldHint: true,
+    destructiveHint: true,
+  },
+  title: 'Send New Inbox Email',
+  description: `**Purpose:** Send a new email from a Resend inbox, starting a new thread in that inbox. This sends a real email the moment you call it, from the inbox's address to the recipients in to, cc, and bcc. The sent message shows up in the inbox's sent folder, and answers to it land in the same thread. A subject and at least one of html or text are required.
+
+**NOT for:** Answering a message already in an inbox thread (use reply-to-inbox-thread-email), passing one along (use forward-inbox-thread-email), or saving a message to send later (use create-inbox-draft). Not for mail from an address that is not an inbox (use send-email, whose mail never appears in an inbox).
+
+**Returns:** The sent email's id.
+
+**When to use:** User asks to send, write, or email someone from an inbox ("send an email from the support inbox", "email the customer as sales@"), and has given you the recipients and the wording. Before using this tool, you MUST double-check with the user that they want to send this email. Reference the RECIPIENTS, the SUBJECT, and the WORDING you are about to send when double-checking, and warn the user that a sent email cannot be recalled. You may only use this tool if the user explicitly confirms they want to send the email after you double-check. The email is created as a draft in the inbox and then sent: if sending fails once the draft exists, the error names the draft ID, so retry with send-inbox-draft or discard it with remove-inbox-draft rather than composing it again. Get the inbox ID from list-inboxes.`,
+  inputSchema: z.object({
+    inboxId: z.string().nonempty().describe('Inbox ID'),
+    to: z
+      .union([email, email.array().min(1)])
+      .describe(
+        'Recipient email address (e.g. "customer@example.com"), or an array of addresses to reach several. Across to, cc, and bcc an email can carry at most 50 recipients in total.',
+      ),
+    cc: z
+      .union([email, email.array().min(1)])
+      .optional()
+      .describe(
+        'Email address to copy, or an array of addresses. Across to, cc, and bcc an email can carry at most 50 recipients in total.',
+      ),
+    bcc: z
+      .union([email, email.array().min(1)])
+      .optional()
+      .describe(
+        'Email address to blind-copy, or an array of addresses. Across to, cc, and bcc an email can carry at most 50 recipients in total.',
+      ),
+    subject: z.string().nonempty().describe('Subject of the email.'),
+    text: z
+      .string()
+      .nonempty()
+      .optional()
+      .describe(
+        'Plain text body of the email. Provide html, text, or both; one of the two is required.',
+      ),
+    html: z
+      .string()
+      .nonempty()
+      .optional()
+      .describe(
+        'HTML body of the email. Provide html, text, or both; one of the two is required.',
+      ),
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe(
+        'Optional unique key that prevents duplicate drafts and sends on retries (sent as the Idempotency-Key header on both calls). Use the same key when retrying the same logical email; use a new key for a different email. Must be 1-256 characters.',
       ),
   }),
 } as const;
@@ -2325,6 +2384,49 @@ export function addInboxTools(server: McpServer, resend: Resend) {
           {
             type: 'text',
             text: 'Pass this email ID to get-email to follow its delivery.',
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'send-new-inbox-email',
+    SEND_NEW_INBOX_EMAIL_TOOL,
+    async ({ inboxId, to, cc, bcc, subject, text, html, idempotencyKey }) => {
+      if (html === undefined && text === undefined) {
+        throw new Error('You must provide `html` or `text` to send an email.');
+      }
+
+      throwIfTooManyInboxDraftRecipients(to, cc, bcc);
+
+      const draft = await resend.inboxes.drafts.create(
+        { inboxId, to, cc, bcc, subject, text, html },
+        { idempotencyKey },
+      );
+
+      throwIfResendFailed(draft, 'Failed to create the email in the inbox');
+
+      const sent = await resend.inboxes.drafts.send(
+        { inboxId, draftId: draft.data.id },
+        { idempotencyKey },
+      );
+
+      throwIfResendFailed(
+        sent,
+        `Failed to send the email. It is saved in the inbox as draft ${draft.data.id}: call send-inbox-draft with that draft ID to retry, or remove-inbox-draft to discard it. Error`,
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Email sent successfully. It started a new thread in the inbox, and cannot be recalled.',
+          },
+          { type: 'text', text: `Email ID: ${sent.data.id}` },
+          {
+            type: 'text',
+            text: 'Pass this email ID to get-email to follow its delivery. The new thread is in the inbox\'s sent folder: list-inbox-threads with folders set to "sent" shows it.',
           },
         ],
       };
