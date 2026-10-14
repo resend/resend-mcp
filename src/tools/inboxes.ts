@@ -3,7 +3,7 @@ import {
   type CreateInboxDraftOptions,
   INBOX_AGENT_ACTIONS,
   INBOX_MESSAGE_FOLDERS,
-  type InboxAgentSettings,
+  type InboxAgentAction,
   type InboxDraft,
   type InboxLabel,
   type InboxLabelColor,
@@ -14,7 +14,6 @@ import {
   MOVE_THREAD_FOLDERS,
   type ReplyInboxThreadEmailOptions,
   type Resend,
-  type UpdateInboxAgentOptions,
   type UpdateInboxDraftOptions,
   type UpdateInboxResponse,
   type UpdateInboxThreadOptions,
@@ -157,14 +156,10 @@ function inboxAttachments(attachments: InboxAttachmentInput[] | undefined) {
   );
 }
 
-function throwIfMissingInboxAgentSettings(
-  settings: Partial<
-    Record<'instructions' | 'tone' | 'enabledActions', unknown>
-  >,
-) {
+function throwIfMissingInboxAgentSettings(settings: UpdateInboxAgentSettings) {
   if (Object.values(settings).every((value) => value === undefined)) {
     throw new Error(
-      'You must provide `instructions`, `tone`, or `enabledActions` to update the inbox agent settings.',
+      'You must provide `instructions`, `tone`, or `actions` to update the inbox agent settings.',
     );
   }
 }
@@ -1152,6 +1147,30 @@ const SEND_NEW_INBOX_EMAIL_TOOL = {
   }),
 } as const;
 
+// The SDK still sends and reads enabled_actions for the inbox agent, so
+// these tools call the endpoint directly until it ships the actions field
+interface InboxAgentSettings {
+  object: 'inbox_agent';
+  instructions: string | null;
+  tone: string | null;
+  actions: InboxAgentAction[];
+}
+
+interface UpdateInboxAgentSettings {
+  instructions?: string | null;
+  tone?: string | null;
+  actions?: InboxAgentAction[];
+}
+
+interface UpdateInboxAgentResult {
+  object: 'inbox_agent';
+  id: string;
+}
+
+function inboxAgentPath(inboxId: string) {
+  return `/inboxes/${encodeURIComponent(inboxId)}/agent`;
+}
+
 const GET_INBOX_AGENT_TOOL = {
   annotations: {
     readOnlyHint: true,
@@ -1159,7 +1178,7 @@ const GET_INBOX_AGENT_TOOL = {
     destructiveHint: false,
   },
   title: 'Get Inbox Agent',
-  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no enabled actions. The tone is one of the presets ${INBOX_AGENT_TONE_PRESETS.join(', ')}. This tool takes the inbox ID only, not an email address; get the ID from list-inboxes or get-inbox.`,
+  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no actions. The tone is one of the presets ${INBOX_AGENT_TONE_PRESETS.join(', ')}. This tool takes the inbox ID only, not an email address; get the ID from list-inboxes or get-inbox.`,
   inputSchema: z.object({
     inboxId: z.string().nonempty().describe('Inbox ID'),
   }),
@@ -1172,7 +1191,7 @@ const UPDATE_INBOX_AGENT_TOOL = {
     destructiveHint: false,
   },
   title: 'Update Inbox Agent',
-  description: `Update the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and/or the actions it is allowed to take on the inbox's threads. At least one of the three is required. A field left out keeps its current value, and "enabledActions" replaces the whole set when passed, so include every action that should stay enabled. Use get-inbox-agent to read the current settings first. This tool takes the inbox ID only, not an email address.`,
+  description: `Update the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and/or the actions it is allowed to take on the inbox's threads. At least one of the three is required. A field left out keeps its current value, and "actions" replaces the whole set when passed, so include every action that should stay enabled. Use get-inbox-agent to read the current settings first. This tool takes the inbox ID only, not an email address.`,
   inputSchema: z.object({
     inboxId: z.string().nonempty().describe('Inbox ID'),
     instructions: z
@@ -1192,7 +1211,7 @@ const UPDATE_INBOX_AGENT_TOOL = {
       .describe(
         `Tone the agent writes in, one of ${INBOX_AGENT_TONE_PRESETS.join(', ')}. Pass null to clear it.`,
       ),
-    enabledActions: z
+    actions: z
       .enum(INBOX_AGENT_ACTIONS)
       .array()
       .optional()
@@ -1206,7 +1225,7 @@ function inboxAgentText(agent: InboxAgentSettings) {
   return [
     `Instructions: ${agent.instructions ?? '(none)'}`,
     `Tone: ${agent.tone ?? '(not set)'}`,
-    `Enabled actions: ${agent.enabled_actions.length > 0 ? agent.enabled_actions.join(', ') : '(none)'}`,
+    `Actions: ${agent.actions.length > 0 ? agent.actions.join(', ') : '(none)'}`,
   ].join('\n');
 }
 
@@ -2476,7 +2495,9 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'get-inbox-agent',
     GET_INBOX_AGENT_TOOL,
     async ({ inboxId }) => {
-      const response = await resend.inboxes.agent.get({ inboxId });
+      const response = await resend.get<InboxAgentSettings>(
+        inboxAgentPath(inboxId),
+      );
 
       throwIfResendFailed(response, 'Failed to get inbox agent settings');
 
@@ -2489,14 +2510,18 @@ export function addInboxTools(server: McpServer, resend: Resend) {
   server.registerTool(
     'update-inbox-agent',
     UPDATE_INBOX_AGENT_TOOL,
-    async ({ inboxId, instructions, tone, enabledActions }) => {
-      const settings = { instructions, tone, enabledActions };
+    async ({ inboxId, instructions, tone, actions }) => {
+      const settings: UpdateInboxAgentSettings = {
+        instructions,
+        tone,
+        actions,
+      };
       throwIfMissingInboxAgentSettings(settings);
 
-      const response = await resend.inboxes.agent.update({
-        inboxId,
-        ...settings,
-      } as UpdateInboxAgentOptions);
+      const response = await resend.patch<UpdateInboxAgentResult>(
+        inboxAgentPath(inboxId),
+        settings,
+      );
 
       throwIfResendFailed(response, 'Failed to update inbox agent settings');
 

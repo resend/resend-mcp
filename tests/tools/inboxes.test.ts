@@ -28,8 +28,8 @@ const getInboxDraft = vi.fn();
 const updateInboxDraft = vi.fn();
 const removeInboxDraft = vi.fn();
 const sendInboxDraft = vi.fn();
-const getInboxAgent = vi.fn();
-const updateInboxAgent = vi.fn();
+const getRequest = vi.fn();
+const patchRequest = vi.fn();
 
 const inboxes = {
   create: createInbox,
@@ -64,13 +64,13 @@ const inboxes = {
     remove: removeInboxDraft,
     send: sendInboxDraft,
   },
-  agent: {
-    get: getInboxAgent,
-    update: updateInboxAgent,
-  },
 };
 
-const resend = { inboxes } as unknown as Resend;
+const resend = {
+  inboxes,
+  get: getRequest,
+  patch: patchRequest,
+} as unknown as Resend;
 
 const INBOX_ID = 'inbox_2ZbUCwvGmIT4mLIN6d3Yz0Ainbd';
 const OTHER_INBOX_ID = 'inbox_3aCvDxwHnJU5nMJO7e4Za1Bjoce';
@@ -3212,12 +3212,12 @@ describe('inbox tools', () => {
   });
 
   it('get-inbox-agent renders the configured settings', async () => {
-    getInboxAgent.mockResolvedValue({
+    getRequest.mockResolvedValue({
       data: {
         object: 'inbox_agent',
         instructions: 'Answer refund questions yourself.',
         tone: 'concise_casual',
-        enabled_actions: ['draft_reply', 'add_labels'],
+        actions: ['draft_reply', 'add_labels'],
       },
       error: null,
     });
@@ -3228,20 +3228,20 @@ describe('inbox tools', () => {
       arguments: { inboxId: INBOX_ID },
     });
 
-    expect(getInboxAgent).toHaveBeenCalledWith({ inboxId: INBOX_ID });
+    expect(getRequest).toHaveBeenCalledWith(`/inboxes/${INBOX_ID}/agent`);
     const text = textOf(result as never);
     expect(text).toContain('Instructions: Answer refund questions yourself.');
     expect(text).toContain('Tone: concise_casual');
-    expect(text).toContain('Enabled actions: draft_reply, add_labels');
+    expect(text).toContain('Actions: draft_reply, add_labels');
   });
 
   it('get-inbox-agent reports an unconfigured agent as empty settings', async () => {
-    getInboxAgent.mockResolvedValue({
+    getRequest.mockResolvedValue({
       data: {
         object: 'inbox_agent',
         instructions: null,
         tone: null,
-        enabled_actions: [],
+        actions: [],
       },
       error: null,
     });
@@ -3255,11 +3255,11 @@ describe('inbox tools', () => {
     const text = textOf(result as never);
     expect(text).toContain('Instructions: (none)');
     expect(text).toContain('Tone: (not set)');
-    expect(text).toContain('Enabled actions: (none)');
+    expect(text).toContain('Actions: (none)');
   });
 
   it('update-inbox-agent passes the changed fields, keeping a null tone that clears it', async () => {
-    updateInboxAgent.mockResolvedValue({
+    patchRequest.mockResolvedValue({
       data: { object: 'inbox_agent', id: 'agent_1' },
       error: null,
     });
@@ -3271,15 +3271,14 @@ describe('inbox tools', () => {
         inboxId: INBOX_ID,
         instructions: 'Answer refund questions yourself.',
         tone: null,
-        enabledActions: ['draft_reply'],
+        actions: ['draft_reply'],
       },
     });
 
-    expect(updateInboxAgent).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
+    expect(patchRequest).toHaveBeenCalledWith(`/inboxes/${INBOX_ID}/agent`, {
       instructions: 'Answer refund questions yourself.',
       tone: null,
-      enabledActions: ['draft_reply'],
+      actions: ['draft_reply'],
     });
     const text = textOf(result as never);
     expect(text).toContain('Agent settings updated successfully.');
@@ -3287,7 +3286,7 @@ describe('inbox tools', () => {
   });
 
   it('update-inbox-agent sends a preset tone as it is', async () => {
-    updateInboxAgent.mockResolvedValue({
+    patchRequest.mockResolvedValue({
       data: { object: 'inbox_agent', id: 'agent_1' },
       error: null,
     });
@@ -3298,8 +3297,7 @@ describe('inbox tools', () => {
       arguments: { inboxId: INBOX_ID, tone: 'concise_casual' },
     });
 
-    expect(updateInboxAgent).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
+    expect(patchRequest).toHaveBeenCalledWith(`/inboxes/${INBOX_ID}/agent`, {
       tone: 'concise_casual',
     });
   });
@@ -3311,7 +3309,7 @@ describe('inbox tools', () => {
       arguments: { inboxId: INBOX_ID, tone: 'friendly and concise' },
     });
 
-    expect(updateInboxAgent).not.toHaveBeenCalled();
+    expect(patchRequest).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
   });
 
@@ -3322,10 +3320,10 @@ describe('inbox tools', () => {
       arguments: { inboxId: INBOX_ID },
     });
 
-    expect(updateInboxAgent).not.toHaveBeenCalled();
+    expect(patchRequest).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
-      'You must provide `instructions`, `tone`, or `enabledActions` to update the inbox agent settings.',
+      'You must provide `instructions`, `tone`, or `actions` to update the inbox agent settings.',
     );
   });
 
@@ -3333,15 +3331,15 @@ describe('inbox tools', () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'update-inbox-agent',
-      arguments: { inboxId: INBOX_ID, enabledActions: ['notify_slack'] },
+      arguments: { inboxId: INBOX_ID, actions: ['notify_slack'] },
     });
 
-    expect(updateInboxAgent).not.toHaveBeenCalled();
+    expect(patchRequest).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
   });
 
   it('update-inbox-agent surfaces an API failure', async () => {
-    updateInboxAgent.mockResolvedValue({
+    patchRequest.mockResolvedValue({
       data: null,
       error: {
         name: 'application_error',
