@@ -30,6 +30,12 @@ const MAX_INBOX_FROM_NAME_LENGTH = 78;
 const MAX_INBOX_SUBJECT_LENGTH = 2000;
 const MAX_INBOX_AGENT_INSTRUCTIONS_LENGTH = 4000;
 const MAX_INBOX_AGENT_TONE_LENGTH = 64;
+const INBOX_AGENT_TONE_PRESETS = [
+  'concise_professional',
+  'concise_casual',
+  'expanded_professional',
+  'expanded_casual',
+] as const;
 const MAX_THREAD_LABEL_IDS = 10;
 const MAX_THREAD_FILTER_LABELS = 50;
 const MAX_INBOX_ATTACHMENTS = 10;
@@ -1154,7 +1160,7 @@ const GET_INBOX_AGENT_TOOL = {
     destructiveHint: false,
   },
   title: 'Get Inbox Agent',
-  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no enabled actions. This tool takes the inbox ID only, not an email address; get the ID from list-inboxes or get-inbox.`,
+  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no enabled actions. The tone is one of the presets ${INBOX_AGENT_TONE_PRESETS.join(', ')}, or custom text written by the inbox owner; older dashboard values such as "Concise · Casual" are custom text. This tool takes the inbox ID only, not an email address; get the ID from list-inboxes or get-inbox.`,
   inputSchema: z.object({
     inboxId: z.string().nonempty().describe('Inbox ID'),
   }),
@@ -1188,7 +1194,7 @@ const UPDATE_INBOX_AGENT_TOOL = {
       .nullable()
       .optional()
       .describe(
-        `Tone the agent writes in (e.g. "friendly and concise"). Pass null to clear it. Max ${MAX_INBOX_AGENT_TONE_LENGTH} characters.`,
+        `Tone the agent writes in. Use one of the presets ${INBOX_AGENT_TONE_PRESETS.join(', ')}, or custom text in the owner's own words (e.g. "friendly and concise"). Pass null to clear it. Custom text is max ${MAX_INBOX_AGENT_TONE_LENGTH} characters.`,
       ),
     enabledActions: z
       .enum(INBOX_AGENT_ACTIONS)

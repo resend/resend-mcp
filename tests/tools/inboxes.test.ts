@@ -3286,6 +3286,36 @@ describe('inbox tools', () => {
     expect(text).toContain('ID: agent_1');
   });
 
+  it('update-inbox-agent lists the tone presets and sends a preset as it is', async () => {
+    updateInboxAgent.mockResolvedValue({
+      data: { object: 'inbox_agent', id: 'agent_1' },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const { tools } = await client.listTools();
+    const tone = tools.find((t) => t.name === 'update-inbox-agent')?.inputSchema
+      .properties?.tone as { description?: string } | undefined;
+    for (const preset of [
+      'concise_professional',
+      'concise_casual',
+      'expanded_professional',
+      'expanded_casual',
+    ]) {
+      expect(tone?.description).toContain(preset);
+    }
+
+    await client.callTool({
+      name: 'update-inbox-agent',
+      arguments: { inboxId: INBOX_ID, tone: 'concise_casual' },
+    });
+
+    expect(updateInboxAgent).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      tone: 'concise_casual',
+    });
+  });
+
   it('update-inbox-agent requires at least one field', async () => {
     const client = await makeClient();
     const result = await client.callTool({
