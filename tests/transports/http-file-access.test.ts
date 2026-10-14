@@ -12,7 +12,8 @@ import { runHttp } from '../../src/transports/http.js';
 
 const send = vi.hoisted(() => vi.fn());
 
-vi.mock('resend', () => ({
+vi.mock('resend', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('resend')>()),
   Resend: class {
     emails = { send };
   },

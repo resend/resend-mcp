@@ -7,7 +7,7 @@ const SEND_EMAIL_TOOL_BASE = {
   title: 'Send Email',
   description: `**Purpose:** Send a single transactional email to one or more recipients immediately (or schedule it). Use for one-off messages, notifications, and direct replies.
 
-**NOT for:** Sending the same email to a whole list/audience (use create-broadcast + send-broadcast). Not for managing contacts or audiences.
+**NOT for:** Sending the same email to a whole list/audience (use create-broadcast + send-broadcast). Not for managing contacts or audiences. Not for sending from a Resend inbox's address: mail sent here never appears in the inbox, so use send-new-inbox-email to start a thread from an inbox and reply-to-inbox-thread-email to answer one.
 
 **Returns:** Send confirmation and email ID.
 

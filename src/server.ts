@@ -14,6 +14,7 @@ import {
   addEditorTools,
   addEmailTools,
   addEventTools,
+  addInboxTools,
   addLogTools,
   addOAuthGrantTools,
   addSegmentTools,
@@ -63,6 +64,7 @@ export function createMcpServer(
     allowedFileDirs,
   });
   addEventTools(server, resend);
+  addInboxTools(server, resend);
   addLogTools(server, resend);
   addOAuthGrantTools(server, resend);
   addSegmentTools(server, resend);

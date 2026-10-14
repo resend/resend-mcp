@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { Resend, WebhookEvent } from 'resend';
+import type { Resend } from 'resend';
 import { z } from 'zod';
 
 const webhookEventSchema = z.enum([
@@ -41,12 +41,6 @@ const webhookEventSchema = z.enum([
   'inbox.draft.sent',
   'inbox.draft.deleted',
 ]);
-
-// The resend SDK's WebhookEvent type has no inbox.* events (still missing in
-// 6.32.1), but the API accepts them.
-function asSdkWebhookEvents(events: z.infer<typeof webhookEventSchema>[]) {
-  return events as WebhookEvent[];
-}
 
 const CREATE_WEBHOOK_TOOL = {
   title: 'Create Webhook',
@@ -215,7 +209,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
     async ({ endpoint, events }) => {
       const response = await resend.webhooks.create({
         endpoint,
-        events: asSdkWebhookEvents(events),
+        events,
       });
 
       if (response.error) {
@@ -299,7 +293,7 @@ export function addWebhookTools(server: McpServer, resend: Resend) {
     async ({ webhookId, endpoint, events, status }) => {
       const response = await resend.webhooks.update(webhookId, {
         endpoint,
-        events: events && asSdkWebhookEvents(events),
+        events,
         status,
       });
 
