@@ -676,6 +676,21 @@ describe('inbox tools', () => {
     expect(text).toContain(INBOX_ID);
   });
 
+  it('update-inbox passes an empty fromName through to remove it', async () => {
+    updateInbox.mockResolvedValue({
+      data: { object: 'inbox', id: INBOX_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    await client.callTool({
+      name: 'update-inbox',
+      arguments: { inboxId: INBOX_ID, fromName: '' },
+    });
+
+    expect(updateInbox).toHaveBeenCalledWith(INBOX_ID, { fromName: '' });
+  });
+
   it('update-inbox requires a name or a from name', async () => {
     const client = await makeClient();
     const result = await client.callTool({
@@ -804,6 +819,43 @@ describe('inbox tools', () => {
     expect(text).toContain('Emails: 3');
     expect(text).toContain('Read: no');
     expect(text).toContain(`after=${THREAD_ID}`);
+  });
+
+  it('list-inbox-threads prints the cc and bcc of the latest email', async () => {
+    listInboxThreads.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          {
+            id: THREAD_ID,
+            subject: 'Refund request',
+            from: 'support@example.com',
+            to: ['customer@example.com'],
+            cc: ['billing@example.com'],
+            bcc: ['records@example.com'],
+            labels: [],
+            folder: 'inbox',
+            email_count: 2,
+            has_attachment: false,
+            has_draft: false,
+            read: true,
+            received_at: '2026-09-10T08:15:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'list-inbox-threads',
+      arguments: { inboxId: INBOX_ID },
+    });
+
+    const text = textOf(result as never);
+    expect(text).toContain('Cc: billing@example.com');
+    expect(text).toContain('Bcc: records@example.com');
   });
 
   it('list-inbox-threads does not forward a sender filter the API cannot answer', async () => {
@@ -1546,6 +1598,23 @@ describe('inbox tools', () => {
     expect(text).toContain(THREAD_ID);
   });
 
+  it('remove-inbox-thread says when the thread was already in the trash', async () => {
+    removeInboxThread.mockResolvedValue({
+      data: { object: 'inbox_thread', id: THREAD_ID, deleted: false },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'remove-inbox-thread',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+    });
+
+    const text = textOf(result as never);
+    expect(text).toContain('already in the trash');
+    expect(text).not.toContain('moved to the trash successfully');
+  });
+
   it('remove-inbox-thread surfaces an API failure', async () => {
     removeInboxThread.mockResolvedValue({
       data: null,
@@ -1749,6 +1818,23 @@ describe('inbox tools', () => {
       { idempotencyKey: undefined },
     );
     expect(textOf(result as never)).toContain(`Email ID: ${SENT_EMAIL_ID}`);
+  });
+
+  it('reply-to-inbox-thread-email caps the subject at 2000 characters', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'reply-to-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'Thanks',
+        subject: 'a'.repeat(2001),
+      },
+    });
+
+    expect(replyToInboxThreadEmail).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
   });
 
   it('reply-to-inbox-thread-email requires an html or text body', async () => {
@@ -2650,6 +2736,24 @@ describe('inbox tools', () => {
     expect(textOf(result as never)).toContain(
       'This draft carries no html or text body.',
     );
+  });
+
+  it('get-inbox-draft treats the empty subject and text of a new reply draft as unset', async () => {
+    getInboxDraft.mockResolvedValue({
+      data: { ...REPLY_DRAFT, subject: '', html: null, text: '' },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-draft',
+      arguments: { inboxId: INBOX_ID, draftId: DRAFT_ID },
+    });
+
+    const text = textOf(result as never);
+    expect(text).toContain('This draft carries no html or text body.');
+    expect(text).not.toContain('--- Plain text body ---');
+    expect(text).toContain('Subject: (no subject)');
   });
 
   it('get-inbox-draft surfaces an API failure', async () => {
