@@ -3216,7 +3216,7 @@ describe('inbox tools', () => {
       data: {
         object: 'inbox_agent',
         instructions: 'Answer refund questions yourself.',
-        tone: 'friendly and concise',
+        tone: 'concise_casual',
         enabled_actions: ['draft_reply', 'add_labels'],
       },
       error: null,
@@ -3231,7 +3231,7 @@ describe('inbox tools', () => {
     expect(getInboxAgent).toHaveBeenCalledWith({ inboxId: INBOX_ID });
     const text = textOf(result as never);
     expect(text).toContain('Instructions: Answer refund questions yourself.');
-    expect(text).toContain('Tone: friendly and concise');
+    expect(text).toContain('Tone: concise_casual');
     expect(text).toContain('Enabled actions: draft_reply, add_labels');
   });
 
@@ -3286,6 +3286,35 @@ describe('inbox tools', () => {
     expect(text).toContain('ID: agent_1');
   });
 
+  it('update-inbox-agent sends a preset tone as it is', async () => {
+    updateInboxAgent.mockResolvedValue({
+      data: { object: 'inbox_agent', id: 'agent_1' },
+      error: null,
+    });
+
+    const client = await makeClient();
+    await client.callTool({
+      name: 'update-inbox-agent',
+      arguments: { inboxId: INBOX_ID, tone: 'concise_casual' },
+    });
+
+    expect(updateInboxAgent).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      tone: 'concise_casual',
+    });
+  });
+
+  it('update-inbox-agent rejects a tone outside the presets', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'update-inbox-agent',
+      arguments: { inboxId: INBOX_ID, tone: 'friendly and concise' },
+    });
+
+    expect(updateInboxAgent).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
   it('update-inbox-agent requires at least one field', async () => {
     const client = await makeClient();
     const result = await client.callTool({
@@ -3324,7 +3353,7 @@ describe('inbox tools', () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'update-inbox-agent',
-      arguments: { inboxId: INBOX_ID, tone: 'x'.repeat(64) },
+      arguments: { inboxId: INBOX_ID, tone: 'concise_casual' },
     });
 
     expect(result.isError).toBe(true);
