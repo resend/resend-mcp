@@ -2985,8 +2985,8 @@ describe('inbox tools', () => {
       sendInboxDraft,
       { inboxId: INBOX_ID, draftId: DRAFT_ID },
     ],
-  ])('%s passes custom headers to the SDK', async (name, rpc, args) => {
-    rpc.mockResolvedValue({ data: { id: SENT_EMAIL_ID }, error: null });
+  ])('%s passes custom headers to the SDK', async (name, sdkMethod, args) => {
+    sdkMethod.mockResolvedValue({ data: { id: SENT_EMAIL_ID }, error: null });
 
     const client = await makeClient();
     const result = await client.callTool({
@@ -2995,7 +2995,7 @@ describe('inbox tools', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(rpc).toHaveBeenCalledWith(
+    expect(sdkMethod).toHaveBeenCalledWith(
       expect.objectContaining({ headers: { 'X-Ticket-Id': '4821' } }),
       { idempotencyKey: undefined },
     );
@@ -3461,6 +3461,7 @@ describe('inbox tools', () => {
             filename: 'receipt.txt',
             content: 'aGVsbG8=',
             contentType: 'text/plain',
+            contentId: 'receipt',
           },
           { filename: 'invoice.pdf', url: 'https://example.com/invoice.pdf' },
         ],
@@ -3475,6 +3476,7 @@ describe('inbox tools', () => {
             filename: 'receipt.txt',
             content: 'aGVsbG8=',
             contentType: 'text/plain',
+            contentId: 'receipt',
           },
           { filename: 'invoice.pdf', path: 'https://example.com/invoice.pdf' },
         ],
@@ -3606,7 +3608,7 @@ describe('inbox sending idempotency key', () => {
       createInboxDraft,
       { inboxId: INBOX_ID, subject: 'Quote' },
     ],
-  ])('%s rejects an empty idempotencyKey before calling the client', async (name, rpc, args) => {
+  ])('%s rejects an empty idempotencyKey before calling the SDK', async (name, sdkMethod, args) => {
     const client = await makeClient();
     const result = await client.callTool({
       name,
@@ -3614,10 +3616,10 @@ describe('inbox sending idempotency key', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(sdkMethod).not.toHaveBeenCalled();
   });
 
-  it('reply-to-inbox-thread-email passes idempotencyKey to the client', async () => {
+  it('reply-to-inbox-thread-email passes idempotencyKey to the SDK', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'reply-to-inbox-thread-email',
@@ -3636,7 +3638,7 @@ describe('inbox sending idempotency key', () => {
     });
   });
 
-  it('forward-inbox-thread-email passes idempotencyKey to the client', async () => {
+  it('forward-inbox-thread-email passes idempotencyKey to the SDK', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'forward-inbox-thread-email',
@@ -3655,7 +3657,7 @@ describe('inbox sending idempotency key', () => {
     });
   });
 
-  it('create-inbox-draft passes idempotencyKey to the client', async () => {
+  it('create-inbox-draft passes idempotencyKey to the SDK', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'create-inbox-draft',
@@ -3672,7 +3674,7 @@ describe('inbox sending idempotency key', () => {
     });
   });
 
-  it('send-inbox-draft passes idempotencyKey to the client', async () => {
+  it('send-inbox-draft passes idempotencyKey to the SDK', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'send-inbox-draft',
