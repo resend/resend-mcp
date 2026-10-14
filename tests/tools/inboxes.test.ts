@@ -763,7 +763,7 @@ describe('inbox tools', () => {
             bcc: [],
             labels: [{ id: LABEL_ID, name: 'Billing', color: '#5B5BD6' }],
             folder: 'archive',
-            message_count: 3,
+            email_count: 3,
             has_attachment: true,
             has_draft: false,
             read: false,
@@ -801,7 +801,7 @@ describe('inbox tools', () => {
     expect(text).toContain(THREAD_ID);
     expect(text).toContain(`Labels: Billing (ID: ${LABEL_ID})`);
     expect(text).toContain('Folder: archive');
-    expect(text).toContain('Messages: 3');
+    expect(text).toContain('Emails: 3');
     expect(text).toContain('Read: no');
     expect(text).toContain(`after=${THREAD_ID}`);
   });
@@ -832,7 +832,7 @@ describe('inbox tools', () => {
       cc: [],
       bcc: [],
       labels: [],
-      message_count: 1,
+      email_count: 1,
       has_attachment: false,
       has_draft: false,
       read: true,
@@ -875,7 +875,7 @@ describe('inbox tools', () => {
             cc: [],
             bcc: [],
             labels: [],
-            message_count: 1,
+            email_count: 1,
             has_attachment: false,
             has_draft: false,
             read: true,
@@ -966,7 +966,7 @@ describe('inbox tools', () => {
     bcc: [],
     labels: [],
     folder: 'inbox',
-    message_count: 2,
+    email_count: 2,
     has_attachment: true,
     has_draft: false,
     read: false,
