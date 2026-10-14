@@ -662,7 +662,7 @@ const REPLY_TO_INBOX_THREAD_EMAIL_TOOL = {
       .boolean()
       .optional()
       .describe(
-        "Reply to everyone on the message instead of only its author. For a message the inbox received, the reply goes to the author as usual and copies the message's other to recipients and its cc recipients. For a message the inbox sent, it goes to its Reply-To when that is not the inbox's address, otherwise to its to recipients, and copies its cc recipients. The inbox's own address is left out and duplicates are removed. Defaults to false (author only).",
+        "Reply to everyone on the message instead of only its author. For a message the inbox received, the reply goes to the author as usual and copies the message's other to recipients and its cc recipients. For a message the inbox sent, it goes to its Reply-To when that is not the inbox's address and copies its to and cc recipients; otherwise it goes to its to recipients and copies its cc recipients. The inbox's own address is left out and duplicates are removed. Defaults to false (author only).",
       ),
     attachments: inboxAttachmentsInput(
       'Up to 10 files. The content of all files can total at most 25 MB. A url file counts toward the 10 files only, because it is fetched when the email is sent. The whole email, encoded, can be at most 40 MB.',
@@ -987,7 +987,7 @@ const UPDATE_INBOX_DRAFT_TOOL = {
 
 **Returns:** The draft's id, type, recipients, subject, attachments, the thread and message it replies to if any, and its timestamps after the update.
 
-**When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it, which is the only way to empty one. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
+**When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it. For attachments, an empty array also removes them all. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
     inboxId: z.string().nonempty().describe('Inbox ID'),
     draftId: z
