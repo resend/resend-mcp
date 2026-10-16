@@ -2377,8 +2377,6 @@ describe('inbox tools', () => {
     });
   });
 
-  // The API accepts a patch with neither field and no-ops, so the tool must not
-  // be stricter than the endpoint it wraps.
   it('update-inbox-label requires name or color', async () => {
     const client = await makeClient();
     const result = await client.callTool({
