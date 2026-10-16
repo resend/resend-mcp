@@ -14,6 +14,9 @@ const searchInboxThreads = vi.fn();
 const getInboxThread = vi.fn();
 const updateInboxThread = vi.fn();
 const removeInboxThread = vi.fn();
+const addInboxThreadLabels = vi.fn();
+const setInboxThreadLabels = vi.fn();
+const removeInboxThreadLabel = vi.fn();
 const listInboxThreadEmails = vi.fn();
 const getInboxThreadEmail = vi.fn();
 const replyToInboxThreadEmail = vi.fn();
@@ -43,6 +46,11 @@ const inboxes = {
     get: getInboxThread,
     update: updateInboxThread,
     remove: removeInboxThread,
+    labels: {
+      add: addInboxThreadLabels,
+      set: setInboxThreadLabels,
+      remove: removeInboxThreadLabel,
+    },
     emails: {
       list: listInboxThreadEmails,
       get: getInboxThreadEmail,
@@ -184,6 +192,9 @@ describe('inbox tools', () => {
       'create-inbox',
       'update-inbox',
       'update-inbox-thread',
+      'add-inbox-thread-labels',
+      'set-inbox-thread-labels',
+      'remove-inbox-thread-label',
       'create-inbox-label',
       'update-inbox-label',
       'create-inbox-draft',
@@ -220,6 +231,29 @@ describe('inbox tools', () => {
     }
   });
 
+  it('takes the inbox ID or email address on every tool that names an inbox', async () => {
+    const client = await makeClient();
+    const { tools } = await client.listTools();
+    const withInbox = tools.filter(
+      (t) => t.inputSchema.properties?.inboxId !== undefined,
+    );
+
+    expect(withInbox.map((t) => t.name).sort()).toEqual(
+      tools
+        .map((t) => t.name)
+        .filter((name) => name !== 'create-inbox' && name !== 'list-inboxes')
+        .sort(),
+    );
+    for (const tool of withInbox) {
+      expect(tool.inputSchema.properties?.inboxId).toEqual({
+        type: 'string',
+        minLength: 1,
+        description:
+          'Inbox ID, or the inbox email address (e.g. "support@example.com"). Not the Resend receiving address.',
+      });
+    }
+  });
+
   it('registers one tool per inbox endpoint, plus send-new-inbox-email', async () => {
     const client = await makeClient();
     const { tools } = await client.listTools();
@@ -241,6 +275,9 @@ describe('inbox tools', () => {
         'search-inbox-threads',
         'get-inbox-thread',
         'update-inbox-thread',
+        'add-inbox-thread-labels',
+        'set-inbox-thread-labels',
+        'remove-inbox-thread-label',
         'remove-inbox-thread',
         'list-inbox-thread-emails',
         'get-inbox-thread-email',
@@ -445,6 +482,8 @@ describe('inbox tools', () => {
             from_name: 'Acme Support',
             unread: 3,
             last_received: '2026-09-10T08:15:00.000Z',
+            created_at: '2026-09-01T12:00:00.000Z',
+            updated_at: '2026-09-02T12:00:00.000Z',
           },
         ],
       },
@@ -465,6 +504,8 @@ describe('inbox tools', () => {
     expect(text).toContain('Found 1 inbox:');
     expect(text).toContain('support@example.com');
     expect(text).toContain('Unread: 3');
+    expect(text).toContain('Created at: 2026-09-01T12:00:00.000Z');
+    expect(text).toContain('Updated at: 2026-09-02T12:00:00.000Z');
     expect(text).toContain(
       'There are more inboxes available. Use the "after" parameter with the last ID to retrieve more.',
     );
@@ -588,6 +629,7 @@ describe('inbox tools', () => {
         drafts: 2,
         last_received: '2026-09-10T08:15:00.000Z',
         created_at: '2026-09-01T12:00:00.000Z',
+        updated_at: '2026-09-02T12:00:00.000Z',
       },
       error: null,
     });
@@ -606,6 +648,7 @@ describe('inbox tools', () => {
     expect(text).toContain('Last received: 2026-09-10T08:15:00.000Z');
     expect(text).toContain('Domain ID: 4dd369bc-aa82-4ff3-97de-514ae3000ee0');
     expect(text).toContain('Created at: 2026-09-01T12:00:00.000Z');
+    expect(text).toContain('Updated at: 2026-09-02T12:00:00.000Z');
   });
 
   it('get-inbox passes an email address through as the identifier', async () => {
@@ -1024,13 +1067,9 @@ describe('inbox tools', () => {
     read: false,
     received_at: '2026-09-10T08:15:00.000Z',
     matched_email_id: EMAIL_ID,
-    highlights: {
-      subject: ['September **invoice**'],
-      body: ['the **invoice** is attached', 'resend the **invoice**'],
-    },
   };
 
-  it('search-inbox-threads forwards every filter and prints the matched email and highlights', async () => {
+  it('search-inbox-threads forwards every filter and prints the matched email', async () => {
     searchInboxThreads.mockResolvedValue({
       data: { object: 'list', has_more: true, data: [SEARCH_RESULT] },
       error: null,
@@ -1078,13 +1117,11 @@ describe('inbox tools', () => {
     expect(text).toContain('Subject: September invoice');
     expect(text).toContain('Folder: inbox');
     expect(text).toContain(`Matched email ID: ${EMAIL_ID}`);
-    expect(text).toContain(
-      'Highlights:\nsubject: September **invoice**\nbody: the **invoice** is attached … resend the **invoice**',
-    );
+    expect(text).not.toContain('Highlights');
     expect(text).toContain(`after=${THREAD_ID}`);
   });
 
-  it('search-inbox-threads omits the highlights and matched email when the API has none, and points backward with before', async () => {
+  it('search-inbox-threads omits the matched email when the API has none, and points backward with before', async () => {
     searchInboxThreads.mockResolvedValue({
       data: {
         object: 'list',
@@ -1094,9 +1131,8 @@ describe('inbox tools', () => {
             ...SEARCH_RESULT,
             id: OTHER_THREAD_ID,
             matched_email_id: null,
-            highlights: {},
           },
-          { ...SEARCH_RESULT, highlights: {} },
+          SEARCH_RESULT,
         ],
       },
       error: null,
@@ -1109,7 +1145,6 @@ describe('inbox tools', () => {
     });
 
     const text = textOf(result as never);
-    expect(text).not.toContain('Highlights');
     expect(text.match(/Matched email ID/g)).toHaveLength(1);
     expect(text).toContain(`before=${OTHER_THREAD_ID}`);
     expect(text).not.toContain('Pass after=');
@@ -1418,7 +1453,7 @@ describe('inbox tools', () => {
     expect(text).not.toContain('Pass after=');
   });
 
-  it('update-inbox-thread marks a thread read and adds a label', async () => {
+  it('update-inbox-thread marks a thread read and drops label IDs', async () => {
     updateInboxThread.mockResolvedValue({
       data: {
         object: 'inbox',
@@ -1446,7 +1481,7 @@ describe('inbox tools', () => {
       inboxId: INBOX_ID,
       threadId: THREAD_ID,
       read: true,
-      addLabelIds: [LABEL_ID],
+      folder: undefined,
     });
     const text = textOf(result as never);
     expect(text).toContain('Thread updated successfully.');
@@ -1480,70 +1515,236 @@ describe('inbox tools', () => {
     expect(updateInboxThread).toHaveBeenCalledWith({
       inboxId: INBOX_ID,
       threadId: THREAD_ID,
+      read: undefined,
       folder: 'archive',
     });
     expect(textOf(result as never)).toContain('Folder: archive');
   });
 
-  it('update-inbox-thread adds and removes labels in one call', async () => {
-    updateInboxThread.mockResolvedValue({
-      data: {
-        object: 'inbox_thread',
-        id: THREAD_ID,
-        subject: 'Refund request',
-        folder: 'inbox',
-        labels: [{ id: LABEL_ID, name: 'Billing', color: '#5B5BD6' }],
-        read: false,
+  it('update-inbox-thread requires read or folder, and label IDs do not count', async () => {
+    const client = await makeClient();
+    for (const args of [
+      { inboxId: INBOX_ID, threadId: THREAD_ID },
+      {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        addLabelIds: [LABEL_ID],
+        removeLabelIds: [OTHER_LABEL_ID],
       },
+    ]) {
+      const result = await client.callTool({
+        name: 'update-inbox-thread',
+        arguments: args,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result as never)).toContain(
+        'You must provide `read` or `folder` to update a thread.',
+      );
+    }
+    expect(updateInboxThread).not.toHaveBeenCalled();
+  });
+
+  const THREAD_LABELS = {
+    object: 'list',
+    data: [
+      { id: LABEL_ID, name: 'Billing', color: '#5B5BD6' },
+      { id: OTHER_LABEL_ID, name: 'Urgent', color: '#E93D82' },
+    ],
+  };
+
+  it('add-inbox-thread-labels sends the label IDs and lists every label on the thread', async () => {
+    addInboxThreadLabels.mockResolvedValue({
+      data: THREAD_LABELS,
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'add-inbox-thread-labels',
+      arguments: {
+        inboxId: 'support@example.com',
+        threadId: THREAD_ID,
+        labelIds: [LABEL_ID, OTHER_LABEL_ID],
+      },
+    });
+
+    expect(addInboxThreadLabels).toHaveBeenCalledWith({
+      emailAddress: 'support@example.com',
+      threadId: THREAD_ID,
+      labels: [LABEL_ID, OTHER_LABEL_ID],
+    });
+    expect(textOf(result as never)).toBe(
+      `Labels added successfully.\nLabels: Billing (ID: ${LABEL_ID}), Urgent (ID: ${OTHER_LABEL_ID})`,
+    );
+  });
+
+  it('add-inbox-thread-labels wraps a single label ID in an array', async () => {
+    addInboxThreadLabels.mockResolvedValue({
+      data: THREAD_LABELS,
       error: null,
     });
 
     const client = await makeClient();
     await client.callTool({
-      name: 'update-inbox-thread',
-      arguments: {
-        inboxId: INBOX_ID,
-        threadId: THREAD_ID,
-        addLabelIds: [LABEL_ID],
-        removeLabelIds: OTHER_LABEL_ID,
-      },
+      name: 'add-inbox-thread-labels',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelIds: LABEL_ID },
     });
 
-    expect(updateInboxThread).toHaveBeenCalledWith({
+    expect(addInboxThreadLabels).toHaveBeenCalledWith({
       inboxId: INBOX_ID,
       threadId: THREAD_ID,
-      addLabelIds: [LABEL_ID],
-      removeLabelIds: [OTHER_LABEL_ID],
+      labels: [LABEL_ID],
     });
   });
 
-  it('update-inbox-thread caps label IDs at 10 per call', async () => {
+  it('add-inbox-thread-labels takes 1 to 10 label IDs', async () => {
     const client = await makeClient();
-    const result = await client.callTool({
-      name: 'update-inbox-thread',
-      arguments: {
-        inboxId: INBOX_ID,
-        threadId: THREAD_ID,
-        addLabelIds: Array.from({ length: 11 }, (_, i) => `label_${i}`),
+    for (const labelIds of [
+      [],
+      Array.from({ length: 11 }, (_, i) => `label_${i}`),
+    ]) {
+      const result = await client.callTool({
+        name: 'add-inbox-thread-labels',
+        arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelIds },
+      });
+
+      expect(result.isError).toBe(true);
+    }
+    expect(addInboxThreadLabels).not.toHaveBeenCalled();
+  });
+
+  it('add-inbox-thread-labels surfaces an API failure', async () => {
+    addInboxThreadLabels.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'not_found',
+        statusCode: 404,
+        message: 'Label not found.',
       },
     });
 
-    expect(updateInboxThread).not.toHaveBeenCalled();
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'add-inbox-thread-labels',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelIds: LABEL_ID },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result as never);
+    expect(text).toContain('Failed to add inbox thread labels');
+    expect(text).toContain('Label not found.');
+  });
+
+  it('set-inbox-thread-labels replaces the labels with the given IDs', async () => {
+    setInboxThreadLabels.mockResolvedValue({
+      data: { object: 'list', data: [THREAD_LABELS.data[0]] },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'set-inbox-thread-labels',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        labelIds: [LABEL_ID],
+      },
+    });
+
+    expect(setInboxThreadLabels).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      threadId: THREAD_ID,
+      labels: [LABEL_ID],
+    });
+    expect(textOf(result as never)).toBe(
+      `Labels set successfully.\nLabels: Billing (ID: ${LABEL_ID})`,
+    );
+  });
+
+  it('set-inbox-thread-labels clears every label with an empty array', async () => {
+    setInboxThreadLabels.mockResolvedValue({
+      data: { object: 'list', data: [] },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'set-inbox-thread-labels',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelIds: [] },
+    });
+
+    expect(setInboxThreadLabels).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      threadId: THREAD_ID,
+      labels: [],
+    });
+    expect(textOf(result as never)).toBe(
+      'Labels set successfully.\nThe thread has no labels.',
+    );
+  });
+
+  it('set-inbox-thread-labels takes at most 100 label IDs', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'set-inbox-thread-labels',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        labelIds: Array.from({ length: 101 }, (_, i) => `label_${i}`),
+      },
+    });
+
+    expect(setInboxThreadLabels).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
   });
 
-  it('update-inbox-thread requires read, folder, or a label', async () => {
-    const client = await makeClient();
-    const result = await client.callTool({
-      name: 'update-inbox-thread',
-      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+  it('remove-inbox-thread-label takes one label off and lists the labels left', async () => {
+    removeInboxThreadLabel.mockResolvedValue({
+      data: { object: 'list', data: [THREAD_LABELS.data[1]] },
+      error: null,
     });
 
-    expect(updateInboxThread).not.toHaveBeenCalled();
-    expect(result.isError).toBe(true);
-    expect(textOf(result as never)).toContain(
-      'You must provide `read`, `folder`, `addLabelIds`, or `removeLabelIds` to update a thread.',
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'remove-inbox-thread-label',
+      arguments: {
+        inboxId: 'support@example.com',
+        threadId: THREAD_ID,
+        labelId: LABEL_ID,
+      },
+    });
+
+    expect(removeInboxThreadLabel).toHaveBeenCalledWith({
+      emailAddress: 'support@example.com',
+      threadId: THREAD_ID,
+      labelId: LABEL_ID,
+    });
+    expect(textOf(result as never)).toBe(
+      `Label removed successfully.\nLabels: Urgent (ID: ${OTHER_LABEL_ID})`,
     );
+  });
+
+  it('remove-inbox-thread-label surfaces an API failure', async () => {
+    removeInboxThreadLabel.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'not_found',
+        statusCode: 404,
+        message: 'Thread not found.',
+      },
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'remove-inbox-thread-label',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID, labelId: LABEL_ID },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result as never);
+    expect(text).toContain('Failed to remove inbox thread label');
+    expect(text).toContain('Thread not found.');
   });
 
   it('update-inbox-thread rejects "sent" as a destination folder', async () => {
@@ -2776,9 +2977,9 @@ describe('inbox tools', () => {
     expect(textOf(result as never)).toContain('Failed to get inbox draft');
   });
 
-  it('update-inbox-draft sends the changed fields', async () => {
+  it('update-inbox-draft sends the changed fields and prints only the draft ID', async () => {
     updateInboxDraft.mockResolvedValue({
-      data: { ...REPLY_DRAFT, subject: 'Re: Refund approved' },
+      data: { object: 'inbox_draft', id: DRAFT_ID },
       error: null,
     });
 
@@ -2802,10 +3003,11 @@ describe('inbox tools', () => {
       subject: 'Re: Refund approved',
       text: 'Your refund has been approved',
       html: undefined,
+      attachments: undefined,
     });
-    const text = textOf(result as never);
-    expect(text).toContain('Draft updated successfully.');
-    expect(text).toContain('Subject: Re: Refund approved');
+    expect(textOf(result as never)).toBe(
+      `Draft updated successfully. Nothing has been sent. Call send-inbox-draft once the user confirms it should go out.\nID: ${DRAFT_ID}`,
+    );
   });
 
   it('update-inbox-draft passes an explicit null through to clear a field', async () => {
@@ -3217,7 +3419,7 @@ describe('inbox tools', () => {
         object: 'inbox_agent',
         instructions: 'Answer refund questions yourself.',
         tone: 'concise_casual',
-        enabled_actions: ['draft_reply', 'add_labels'],
+        actions: ['draft_reply', 'add_labels', 'archive', 'move_to_trash'],
       },
       error: null,
     });
@@ -3225,14 +3427,15 @@ describe('inbox tools', () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'get-inbox-agent',
-      arguments: { inboxId: INBOX_ID },
+      arguments: { inboxId: 'support@example.com' },
     });
 
-    expect(getInboxAgent).toHaveBeenCalledWith({ inboxId: INBOX_ID });
-    const text = textOf(result as never);
-    expect(text).toContain('Instructions: Answer refund questions yourself.');
-    expect(text).toContain('Tone: concise_casual');
-    expect(text).toContain('Enabled actions: draft_reply, add_labels');
+    expect(getInboxAgent).toHaveBeenCalledWith({
+      emailAddress: 'support@example.com',
+    });
+    expect(textOf(result as never)).toBe(
+      'Instructions: Answer refund questions yourself.\nTone: concise_casual\nActions: draft_reply, add_labels, archive, move_to_trash',
+    );
   });
 
   it('get-inbox-agent reports an unconfigured agent as empty settings', async () => {
@@ -3241,7 +3444,7 @@ describe('inbox tools', () => {
         object: 'inbox_agent',
         instructions: null,
         tone: null,
-        enabled_actions: [],
+        actions: [],
       },
       error: null,
     });
@@ -3255,7 +3458,7 @@ describe('inbox tools', () => {
     const text = textOf(result as never);
     expect(text).toContain('Instructions: (none)');
     expect(text).toContain('Tone: (not set)');
-    expect(text).toContain('Enabled actions: (none)');
+    expect(text).toContain('Actions: (none)');
   });
 
   it('update-inbox-agent passes the changed fields, keeping a null tone that clears it', async () => {
@@ -3271,7 +3474,7 @@ describe('inbox tools', () => {
         inboxId: INBOX_ID,
         instructions: 'Answer refund questions yourself.',
         tone: null,
-        enabledActions: ['draft_reply'],
+        actions: ['draft_reply', 'archive', 'move_to_trash'],
       },
     });
 
@@ -3279,7 +3482,7 @@ describe('inbox tools', () => {
       inboxId: INBOX_ID,
       instructions: 'Answer refund questions yourself.',
       tone: null,
-      enabledActions: ['draft_reply'],
+      actions: ['draft_reply', 'archive', 'move_to_trash'],
     });
     const text = textOf(result as never);
     expect(text).toContain('Agent settings updated successfully.');
@@ -3300,7 +3503,9 @@ describe('inbox tools', () => {
 
     expect(updateInboxAgent).toHaveBeenCalledWith({
       inboxId: INBOX_ID,
+      instructions: undefined,
       tone: 'concise_casual',
+      actions: undefined,
     });
   });
 
@@ -3325,15 +3530,32 @@ describe('inbox tools', () => {
     expect(updateInboxAgent).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
-      'You must provide `instructions`, `tone`, or `enabledActions` to update the inbox agent settings.',
+      'You must provide `instructions`, `tone`, or `actions` to update the inbox agent settings.',
     );
   });
 
-  it('update-inbox-agent rejects an action outside the configurable set', async () => {
+  it('update-inbox-agent rejects an action outside the configurable set, old names included', async () => {
+    const client = await makeClient();
+    for (const actions of [
+      ['notify_slack'],
+      ['archive_thread'],
+      ['delete_thread'],
+    ]) {
+      const result = await client.callTool({
+        name: 'update-inbox-agent',
+        arguments: { inboxId: INBOX_ID, actions },
+      });
+
+      expect(result.isError).toBe(true);
+    }
+    expect(updateInboxAgent).not.toHaveBeenCalled();
+  });
+
+  it('update-inbox-agent does not count enabledActions as a field', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'update-inbox-agent',
-      arguments: { inboxId: INBOX_ID, enabledActions: ['notify_slack'] },
+      arguments: { inboxId: INBOX_ID, enabledActions: ['draft_reply'] },
     });
 
     expect(updateInboxAgent).not.toHaveBeenCalled();
@@ -3540,32 +3762,17 @@ describe('inbox tools', () => {
     );
   });
 
-  it('forward-inbox-thread-email passes attachments and refuses more than 10', async () => {
+  it('forward-inbox-thread-email passes attachments with no file-count cap', async () => {
     forwardInboxThreadEmail.mockResolvedValue({
       data: { id: SENT_EMAIL_ID },
       error: null,
     });
+    const files = Array.from({ length: 11 }, (_, i) => ({
+      filename: `file-${i}.txt`,
+      content: 'bm90ZXM=',
+    }));
 
     const client = await makeClient();
-    await client.callTool({
-      name: 'forward-inbox-thread-email',
-      arguments: {
-        inboxId: INBOX_ID,
-        threadId: THREAD_ID,
-        emailId: EMAIL_ID,
-        to: 'teammate@example.com',
-        attachments: [{ filename: 'notes.txt', content: 'bm90ZXM=' }],
-      },
-    });
-
-    expect(forwardInboxThreadEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachments: [{ filename: 'notes.txt', content: 'bm90ZXM=' }],
-      }),
-      { idempotencyKey: undefined },
-    );
-
-    forwardInboxThreadEmail.mockClear();
     const result = await client.callTool({
       name: 'forward-inbox-thread-email',
       arguments: {
@@ -3573,15 +3780,80 @@ describe('inbox tools', () => {
         threadId: THREAD_ID,
         emailId: EMAIL_ID,
         to: 'teammate@example.com',
-        attachments: Array.from({ length: 11 }, (_, i) => ({
-          filename: `file-${i}.txt`,
-          content: 'bm90ZXM=',
-        })),
+        attachments: files,
       },
     });
 
-    expect(forwardInboxThreadEmail).not.toHaveBeenCalled();
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeFalsy();
+    expect(forwardInboxThreadEmail).toHaveBeenCalledWith(
+      {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        to: 'teammate@example.com',
+        cc: undefined,
+        bcc: undefined,
+        html: undefined,
+        text: undefined,
+        subject: undefined,
+        attachments: files.map(({ filename, content }) => ({
+          filename,
+          content,
+          path: undefined,
+          contentType: undefined,
+          contentId: undefined,
+        })),
+        headers: undefined,
+      },
+      { idempotencyKey: undefined },
+    );
+  });
+
+  it('reply-to-inbox-thread-email passes attachments with no file-count cap', async () => {
+    replyToInboxThreadEmail.mockResolvedValue({
+      data: { id: SENT_EMAIL_ID },
+      error: null,
+    });
+    const files = Array.from({ length: 11 }, (_, i) => ({
+      filename: `file-${i}.txt`,
+      url: `https://example.com/file-${i}.txt`,
+    }));
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'reply-to-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'See attached.',
+        attachments: files,
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(replyToInboxThreadEmail).toHaveBeenCalledWith(
+      {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        html: undefined,
+        text: 'See attached.',
+        subject: undefined,
+        cc: undefined,
+        bcc: undefined,
+        replyAll: undefined,
+        attachments: files.map(({ filename, url }) => ({
+          filename,
+          content: undefined,
+          path: url,
+          contentType: undefined,
+          contentId: undefined,
+        })),
+        headers: undefined,
+      },
+      { idempotencyKey: undefined },
+    );
   });
 });
 
