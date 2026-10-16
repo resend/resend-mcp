@@ -2,10 +2,11 @@ import type { Resend } from 'resend';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runStdio } from '../../src/transports/stdio.js';
 
-const { mockServeStdio } = vi.hoisted(() => ({
+const { mockServeStdio, mockStdioServerTransport } = vi.hoisted(() => ({
   mockServeStdio: vi.fn(() => ({
     close: vi.fn().mockResolvedValue(undefined),
   })),
+  mockStdioServerTransport: vi.fn(),
 }));
 
 vi.mock('../../src/server.js', () => ({
@@ -14,6 +15,7 @@ vi.mock('../../src/server.js', () => ({
 
 vi.mock('@modelcontextprotocol/server/stdio', () => ({
   serveStdio: mockServeStdio,
+  StdioServerTransport: mockStdioServerTransport,
 }));
 
 describe('runStdio', () => {
@@ -33,6 +35,19 @@ describe('runStdio', () => {
     expect(mockServeStdio).toHaveBeenCalledTimes(1);
     const [, options] = mockServeStdio.mock.calls[0];
     expect(options).toMatchObject({ legacy: 'serve' });
+  });
+
+  it('reads messages up to 64 MiB so large attachments fit', async () => {
+    const resend = {} as Resend;
+    await runStdio(resend, { replierEmailAddresses: [] }, 're_test_key');
+
+    expect(mockStdioServerTransport).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      { maxBufferSize: 64 * 1024 * 1024 },
+    );
+    const [, options] = mockServeStdio.mock.calls[0];
+    expect(options.transport).toBe(mockStdioServerTransport.mock.instances[0]);
   });
 
   it('creates server via the factory passed to serveStdio', async () => {

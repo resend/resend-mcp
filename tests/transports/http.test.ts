@@ -122,6 +122,30 @@ describe('runHttp', () => {
     server.close();
   });
 
+  it('accepts a request body above the default 100kb JSON limit', async () => {
+    const server = await runHttp({ replierEmailAddresses: [] }, 0);
+    const { port } = server.address() as AddressInfo;
+
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'x'.repeat(20 * 1024 * 1024), version: '0.0.0' },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(401);
+
+    server.close();
+  });
+
   it('rejects a non-localhost Host header by default (localhost protection on)', async () => {
     const server = await runHttp({ replierEmailAddresses: [] }, 0);
     const { port } = server.address() as AddressInfo;
