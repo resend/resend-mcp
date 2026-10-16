@@ -138,7 +138,7 @@ function inboxDraftAttachmentsInput(note: string) {
     })
     .array()
     .describe(
-      `Files to store on the draft. Each one needs filename, base64 content and contentType; a draft cannot attach a file by URL. There is no limit on the number of files, but together they can total at most 25 MB. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
+      `Files to store on the draft. Each one needs filename, base64 content and contentType; a draft cannot attach a file by URL. Together they can total at most 25 MB. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
     );
 }
 
