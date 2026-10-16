@@ -73,13 +73,20 @@ function inboxAttachmentsInput(limitNote: string) {
         .string()
         .nonempty()
         .optional()
-        .describe('Base64-encoded file content. Provide content or url.'),
+        .describe(
+          'Base64-encoded file content. Use `url` instead for files larger than a few hundred kilobytes. Provide content or url.',
+        ),
       url: z
         .string()
         .url()
+        .refine(
+          (url) =>
+            /^https?:\/\//.test(url) && !url.startsWith('http://localhost:'),
+          'The URL must start with http:// or https:// and cannot start with http://localhost:.',
+        )
         .optional()
         .describe(
-          'URL where the file is hosted. Resend fetches it when the email is sent. It must start with http and cannot start with http://localhost:. A URL Resend cannot fetch fails the email when it is sent, not this call. Provide content or url.',
+          'URL where the file is hosted. Resend fetches it when the email is sent. It must start with http:// or https:// and cannot start with http://localhost:. A URL Resend cannot fetch fails the email when it is sent, not this call. Provide content or url.',
         ),
       contentType: z
         .string()
@@ -303,7 +310,7 @@ const INBOX_THREAD_FILTER_INPUTS = {
     ])
     .optional()
     .describe(
-      'Only return threads in any of these folders. Pass one folder, or an array to match several. Default: inbox, or inbox, archive and sent once "labels" is passed. "spam" and "trash" are only included when named here.',
+      'Only return threads in any of these folders. Pass one folder, or an array to match several. A thread is returned when any of its emails is in one of the folders, so a thread in the inbox folder that holds an email the inbox sent matches both "inbox" and "sent". Default: inbox, or inbox, archive and sent once "labels" is passed. "spam" and "trash" are only included when named here.',
     ),
   labels: z
     .union([
@@ -864,7 +871,7 @@ const UPDATE_INBOX_LABEL_TOOL = {
     destructiveHint: false,
   },
   title: 'Update Inbox Label',
-  description: `Update a label in a Resend inbox: rename it, recolor it, or both. The change follows the label everywhere it is already in use, so every thread carrying it shows the new name and color. A new name must not match another label on the inbox, ignoring case. Get the label ID from list-inbox-labels.`,
+  description: `Update a label in a Resend inbox: rename it, recolor it, or both. At least one of the two is required. The change follows the label everywhere it is already in use, so every thread carrying it shows the new name and color. A new name must not match another label on the inbox, ignoring case. Get the label ID from list-inbox-labels.`,
   inputSchema: z.object({
     inboxId: INBOX_ID_INPUT,
     labelId: z
@@ -1046,7 +1053,7 @@ const UPDATE_INBOX_DRAFT_TOOL = {
 
 **Returns:** The draft's id. Use get-inbox-draft to read the draft after the update.
 
-**When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it. For attachments, an empty array also removes them all. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
+**When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it. The draft must keep at least one non-empty field, so clearing the last one with null returns a 422. For attachments, an empty array also removes them all. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
     inboxId: INBOX_ID_INPUT,
     draftId: z
@@ -2233,6 +2240,12 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'update-inbox-label',
     UPDATE_INBOX_LABEL_TOOL,
     async ({ inboxId, labelId, name, color }) => {
+      if (name === undefined && color === undefined) {
+        throw new Error(
+          'You must provide `name` or `color` to update an inbox label.',
+        );
+      }
+
       const response = await resend.inboxes.labels.update({
         ...inboxSelector(inboxId),
         labelId,
@@ -2634,7 +2647,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       return {
         content: [
           { type: 'text', text: 'Agent settings updated successfully.' },
-          { type: 'text', text: `ID: ${response.data.id}` },
+          { type: 'text', text: `Agent ID: ${response.data.id}` },
         ],
       };
     },

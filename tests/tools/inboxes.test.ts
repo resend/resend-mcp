@@ -2377,22 +2377,18 @@ describe('inbox tools', () => {
     });
   });
 
-  // The API accepts a patch with neither field and no-ops, so the tool must not
-  // be stricter than the endpoint it wraps.
-  it('update-inbox-label passes an empty patch through instead of rejecting it', async () => {
+  it('update-inbox-label requires name or color', async () => {
     const client = await makeClient();
     const result = await client.callTool({
       name: 'update-inbox-label',
       arguments: { inboxId: INBOX_ID, labelId: LABEL_ID },
     });
 
-    expect(result.isError).toBeFalsy();
-    expect(updateInboxLabel).toHaveBeenCalledWith({
-      inboxId: INBOX_ID,
-      labelId: LABEL_ID,
-      name: undefined,
-      color: undefined,
-    });
+    expect(updateInboxLabel).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain(
+      'You must provide `name` or `color` to update an inbox label.',
+    );
   });
 
   it('update-inbox-label surfaces an API failure', async () => {
@@ -3486,7 +3482,7 @@ describe('inbox tools', () => {
     });
     const text = textOf(result as never);
     expect(text).toContain('Agent settings updated successfully.');
-    expect(text).toContain('ID: agent_1');
+    expect(text).toContain('Agent ID: agent_1');
   });
 
   it('update-inbox-agent sends a preset tone as it is', async () => {
@@ -3759,6 +3755,29 @@ describe('inbox tools', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
       'Attachment "receipt.txt" needs exactly one of `content` or `url`.',
+    );
+  });
+
+  it.each([
+    'ftp://example.com/receipt.txt',
+    'http://localhost:3000/receipt.txt',
+  ])('reply-to-inbox-thread-email refuses the attachment url %s', async (url) => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'reply-to-inbox-thread-email',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        emailId: EMAIL_ID,
+        text: 'Receipt attached.',
+        attachments: [{ filename: 'receipt.txt', url }],
+      },
+    });
+
+    expect(replyToInboxThreadEmail).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain(
+      'The URL must start with http:// or https:// and cannot start with http://localhost:.',
     );
   });
 

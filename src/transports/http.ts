@@ -14,6 +14,7 @@ import {
 import { Resend } from 'resend';
 import { createMcpServer } from '../server.js';
 import type { ServerOptions } from '../types.js';
+import { MAX_MESSAGE_BYTES } from './limits.js';
 
 const sessions: Record<string, NodeStreamableHTTPServerTransport> = {};
 
@@ -90,7 +91,11 @@ export async function runHttp(
     ...options,
     allowedFileDirs: options.allowedFileDirs ?? [],
   };
-  const app = createMcpExpressApp({ host, allowedHosts });
+  const app = createMcpExpressApp({
+    host,
+    allowedHosts,
+    jsonLimit: `${MAX_MESSAGE_BYTES}b`,
+  });
 
   app.get('/health', (_req: IncomingMessage, res: ServerResponse) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
