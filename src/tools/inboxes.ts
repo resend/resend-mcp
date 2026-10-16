@@ -73,7 +73,9 @@ function inboxAttachmentsInput(limitNote: string) {
         .string()
         .nonempty()
         .optional()
-        .describe('Base64-encoded file content. Provide content or url.'),
+        .describe(
+          'Base64-encoded file content. Use `url` instead for files larger than a few hundred kilobytes. Provide content or url.',
+        ),
       url: z
         .string()
         .url()
