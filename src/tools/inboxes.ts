@@ -9,6 +9,7 @@ import {
   type InboxLabel,
   type InboxLabelColor,
   type InboxMessage,
+  type InboxSelector,
   type InboxThread,
   type InboxThreadLabel,
   type InboxThreadLabelList,
@@ -35,13 +36,15 @@ const MAX_THREAD_LABEL_IDS = 10;
 const MAX_INBOX_LABELS = 100;
 const MAX_THREAD_FILTER_LABELS = 50;
 
-function inboxIdInput() {
-  return z
-    .string()
-    .nonempty()
-    .describe(
-      'Inbox ID, or the inbox email address (e.g. "support@example.com"). Not the Resend receiving address.',
-    );
+const INBOX_ID_INPUT = z
+  .string()
+  .nonempty()
+  .describe(
+    'Inbox ID, or the inbox email address (e.g. "support@example.com"). Not the Resend receiving address.',
+  );
+
+function inboxSelector(inboxId: string): InboxSelector {
+  return inboxId.includes('@') ? { emailAddress: inboxId } : { inboxId };
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] | undefined {
@@ -76,7 +79,7 @@ function inboxAttachmentsInput(limitNote: string) {
         .url()
         .optional()
         .describe(
-          'URL where the file is hosted. Resend fetches it when the email is sent. It must start with http and cannot point to http://localhost. A URL Resend cannot fetch fails the email when it is sent, not the call. Provide content or url.',
+          'URL where the file is hosted. Resend fetches it when the email is sent. It must start with http and cannot start with http://localhost:. A URL Resend cannot fetch fails the email when it is sent, not this call. Provide content or url.',
         ),
       contentType: z
         .string()
@@ -159,16 +162,6 @@ function inboxAttachments(attachments: InboxAttachmentInput[] | undefined) {
       return { filename, content, path: url, contentType, contentId };
     },
   );
-}
-
-function throwIfMissingInboxAgentSettings(
-  settings: Partial<Record<'instructions' | 'tone' | 'actions', unknown>>,
-) {
-  if (Object.values(settings).every((value) => value === undefined)) {
-    throw new Error(
-      'You must provide `instructions`, `tone`, or `actions` to update the inbox agent settings.',
-    );
-  }
 }
 
 const CREATE_INBOX_TOOL = {
@@ -256,7 +249,7 @@ const GET_INBOX_TOOL = {
   title: 'Get Inbox',
   description: `Get an inbox by ID or email address from Resend, including its domain, receiving address, creation and update times, how many threads are unread, how many drafts it holds, and when it last received mail. When the user names the inbox by its address, pass the address directly. Otherwise use list-inboxes to find the ID. Use the returned ID with the other inbox tools.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
   }),
 } as const;
 
@@ -269,7 +262,7 @@ const UPDATE_INBOX_TOOL = {
   title: 'Update Inbox',
   description: `Update an inbox in Resend by ID or email address. Renames the inbox internally, changes the display name shown on the mail it sends, or both. At least one of the two is required. An inbox's email address cannot be changed.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     name: z
       .string()
       .nonempty()
@@ -297,12 +290,12 @@ const REMOVE_INBOX_TOOL = {
   title: 'Remove Inbox',
   description: `Remove an inbox by ID or email address from Resend. This also deletes all of the inbox's threads. When the user names the inbox by its address, pass the address directly. Otherwise use list-inboxes to find the ID. Before using this tool, you MUST double-check with the user that they want to remove this inbox. Reference the EMAIL ADDRESS of the inbox when double-checking, and warn the user that removing an inbox is irreversible and takes every thread in it with it. You may only use this tool if the user explicitly confirms they want to remove the inbox after you double-check.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
   }),
 } as const;
 
 const INBOX_THREAD_FILTER_INPUTS = {
-  inboxId: inboxIdInput(),
+  inboxId: INBOX_ID_INPUT,
   folders: z
     .union([
       z.enum(INBOX_MESSAGE_FOLDERS),
@@ -398,7 +391,7 @@ const SEARCH_INBOX_THREADS_TOOL = {
 **When to use:** User wants to find mail about something, from or to someone, with an attachment, or from a period of time. Get the inbox ID from list-inboxes, then open a result with get-inbox-thread. Every word in "query" must appear in the email, "quoted phrases" match exactly, and a leading - excludes a word; at most 32 words. An array of values means any of them; different parameters combine with AND. Results are newest first and paginated like list-inbox-threads: when more threads exist, pass the last thread's ID back as "after". When paging backward with "before", pass the first thread's ID back as "before". A search that matches more than 10,000 threads covers the 10,000 with the newest matching email, newest first.`,
   inputSchema: z.object({
     ...INBOX_THREAD_FILTER_INPUTS,
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     query: z
       .string()
       .nonempty()
@@ -449,7 +442,7 @@ const GET_INBOX_THREAD_TOOL = {
 
 **When to use:** User wants to see a conversation, or you need a message's email ID. A message's ID IS the email ID that get-inbox-thread-email, reply-to-inbox-thread-email, and forward-inbox-thread-email take as their "emailId". Get the thread ID from list-inbox-threads or search-inbox-threads.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     limit: z
       .number()
@@ -492,7 +485,7 @@ const UPDATE_INBOX_THREAD_TOOL = {
 
 **When to use:** User asks to archive a thread, mark it read or unread, or move it to spam or trash. Moving a thread to trash schedules it for deletion in 30 days, the same as remove-inbox-thread. Moving a thread out of trash restores it and clears its deletion deadline. When both are passed, read is applied before folder, and the two are not atomic: if the folder move fails, the read change stays applied. Get the thread ID from list-inbox-threads.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     read: z
       .boolean()
@@ -524,7 +517,7 @@ const ADD_INBOX_THREAD_LABELS_TOOL = {
 
 **When to use:** User asks to tag, label, or categorize a thread. Adding a label the thread already carries changes nothing. If any label ID is not found, nothing changes. Get the thread ID from list-inbox-threads and the label IDs from list-inbox-labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     labelIds: z
       .union([
@@ -552,7 +545,7 @@ const SET_INBOX_THREAD_LABELS_TOOL = {
 
 **When to use:** User states the full set of labels a thread should have, like "label this only as Billing". If any label ID is not found, nothing changes. The labels themselves are kept, and stay on every other thread that carries them. Get the thread ID from list-inbox-threads and the label IDs from list-inbox-labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     labelIds: z
       .string()
@@ -580,7 +573,7 @@ const REMOVE_INBOX_THREAD_LABEL_TOOL = {
 
 **When to use:** User asks to untag or unlabel a thread. Removing a label the thread does not carry changes nothing. Get the thread ID from list-inbox-threads and the label ID from the thread's labels or list-inbox-labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     labelId: z
       .string()
@@ -598,7 +591,7 @@ const REMOVE_INBOX_THREAD_TOOL = {
   title: 'Remove Inbox Thread',
   description: `Remove a thread by ID from a Resend inbox. This moves the whole thread, every message in it included, to the trash folder and schedules it for deletion in 30 days. Until then, update-inbox-thread can restore it by moving it to inbox, archive, or spam, which also clears the deletion deadline. Before using this tool, you MUST double-check with the user that they want to remove this thread. Reference the SUBJECT of the thread when double-checking, and tell the user it takes every message in the thread to the trash with it. You may only use this tool if the user explicitly confirms they want to remove the thread after you double-check. To get a thread out of the way without trashing it, use update-inbox-thread with folder "archive" instead.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
   }),
 } as const;
@@ -618,7 +611,7 @@ const LIST_INBOX_THREAD_EMAILS_TOOL = {
 
 **When to use:** You need the next page of a long thread after get-inbox-thread, or only the emails of a thread. A message's ID IS the email ID that get-inbox-thread-email, reply-to-inbox-thread-email, and forward-inbox-thread-email take as their "emailId". This endpoint is paginated: when more emails exist, pass the last email's ID back as "after" for the next, newer page. When paging backward with "before", pass the first email's ID back as "before".`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     limit: z
       .number()
@@ -661,7 +654,7 @@ const GET_INBOX_THREAD_EMAIL_TOOL = {
 
 **When to use:** get-inbox-thread points here for a body. Take the "Email ID" it printed for the message the user wants and pass it as emailId. Attachment contents cannot be downloaded through this server: attachments are listed, not fetched.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     emailId: z
       .string()
@@ -687,7 +680,7 @@ const REPLY_TO_INBOX_THREAD_EMAIL_TOOL = {
 
 **When to use:** User asks to reply to, answer, or follow up on a message in an inbox thread, and has given you the wording. Before using this tool, you MUST double-check with the user that they want to send this reply. Reference the WORDING you are about to send and the SUBJECT of the thread you are answering when double-checking, and warn the user that a reply cannot be undone: a sent email cannot be recalled. You may only use this tool if the user explicitly confirms they want to send the reply after you double-check. You do not choose who the reply answers: by default the reply goes only to the author of the message you answer, at its Reply-To address if it has one. If the inbox sent that message, the reply goes to the people it was sent to. Set replyAll to true when the user wants to reply to everyone on that message. Pass cc or bcc only to add recipients the user named. Mention in the double-check whether you reply to the author only or to everyone, and any cc or bcc recipients you add. A reply can reach at most 50 recipients in total, counted after replyAll adds everyone on the message. Name any attachments in the double-check. Omit subject to use the thread's. Get the emailId from get-inbox-thread.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     emailId: z
       .string()
@@ -760,7 +753,7 @@ const FORWARD_INBOX_THREAD_EMAIL_TOOL = {
 
 **When to use:** User asks to forward a message in an inbox thread, pass it along, or loop someone in on it. Before using this tool, you MUST double-check with the user that they want to forward this message. Reference the RECIPIENTS, including any cc and bcc, and the SUBJECT when double-checking, and warn the user that forwarding cannot be undone: a sent email cannot be recalled, and every recipient keeps the original message. You may only use this tool if the user explicitly confirms they want to forward the message after you double-check. "to" is the only body field required: html and text are an optional note of your own, because the original message is carried either way. Across to, cc and bcc a forward can reach at most 50 recipients in total. The original message's attachments are sent with the forward; name any attachments you add in the double-check. A message whose original attachment was sent from a URL cannot be forwarded. Get the emailId from get-inbox-thread.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     threadId: z.string().nonempty().describe('Thread ID'),
     emailId: z
       .string()
@@ -832,7 +825,7 @@ const LIST_INBOX_LABELS_TOOL = {
 
 **When to use:** User asks what labels an inbox has, or you need a label ID for a label you have not seen on a thread yet. The thread tools print each label's ID alongside its name, so reuse those when you already have them. Get the inbox ID from list-inboxes.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
   }),
 } as const;
 
@@ -845,7 +838,7 @@ const CREATE_INBOX_LABEL_TOOL = {
   title: 'Create Inbox Label',
   description: `Create a label in a Resend inbox. A label is a tag the threads in that inbox can carry. Creating one does not put it on anything: pass the ID this returns to add-inbox-thread-labels to apply it to a thread. Resend picks a color when you omit one. Label names are unique per inbox, ignoring case, and an inbox can have at most 100 labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     name: z
       .string()
       .trim()
@@ -873,7 +866,7 @@ const UPDATE_INBOX_LABEL_TOOL = {
   title: 'Update Inbox Label',
   description: `Update a label in a Resend inbox: rename it, recolor it, or both. The change follows the label everywhere it is already in use, so every thread carrying it shows the new name and color. A new name must not match another label on the inbox, ignoring case. Get the label ID from list-inbox-labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     labelId: z
       .string()
       .nonempty()
@@ -906,7 +899,7 @@ const REMOVE_INBOX_LABEL_TOOL = {
   title: 'Remove Inbox Label',
   description: `Remove a label by ID from a Resend inbox. This takes the label off every thread that carries it, but the threads themselves are left alone and no mail is deleted. Before using this tool, you MUST double-check with the user that they want to remove this label. Reference the NAME of the label when double-checking, and warn the user that removing a label is irreversible and strips it from every thread it is on. You may only use this tool if the user explicitly confirms they want to remove the label after you double-check. Get the label ID from list-inbox-labels.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     labelId: z
       .string()
       .nonempty()
@@ -929,7 +922,7 @@ const LIST_INBOX_DRAFTS_TOOL = {
 
 **When to use:** User asks what drafts an inbox holds, or you need a draft ID. A "reply" draft answers a message in a thread and carries that thread_id; a "standalone" draft is a new message belonging to no thread. Get the inbox ID from list-inboxes, then the draft ID from here for get-inbox-draft, update-inbox-draft, send-inbox-draft, or remove-inbox-draft. This endpoint is paginated: when more drafts exist, pass the last draft's ID back as "after". When paging backward with "before", pass the first draft's ID back as "before".`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     limit: z
       .number()
       .int()
@@ -969,7 +962,7 @@ const CREATE_INBOX_DRAFT_TOOL = {
 
 **When to use:** User asks to draft, compose, or prepare a message without sending it, or wants to read the wording back before it goes out. Pass threadId and replyToEmailId together to draft a reply to a message in a thread; omit both to draft a standalone message. A reply draft without "to" is addressed to the author of the message it replies to, at its Reply-To address if it has one, or, for a message the inbox sent, to its to recipients. An unknown threadId, or a replyToEmailId that is not in that thread, returns a 404. A reply draft without a subject stores an empty one. When it is sent, it takes the thread's subject, prefixed with "Re:" when it does not already start with it. A message can have only one unsent reply draft, so drafting a second reply to it returns the ID of the existing draft. That call ignores every other field except attachments, which replace the existing draft's attachments. The id this returns is the "draftId" that get-inbox-draft, update-inbox-draft, send-inbox-draft, and remove-inbox-draft all take.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     to: z
       .union([email, email.array().min(1)])
       .optional()
@@ -1032,7 +1025,7 @@ const GET_INBOX_DRAFT_TOOL = {
   title: 'Get Inbox Draft',
   description: `Get a draft by ID from a Resend inbox, body included: its recipients, subject, html and text, the files it carries, and the thread and message it replies to if it is a reply. A draft is one message being composed, so its body is returned here, unlike get-inbox-thread, which lists a whole conversation without the bodies. Use this to read a draft back before send-inbox-draft puts it in the mail. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     draftId: z
       .string()
       .nonempty()
@@ -1055,7 +1048,7 @@ const UPDATE_INBOX_DRAFT_TOOL = {
 
 **When to use:** User asks to change, rewrite, or fix a draft before it is sent. Omitting a field leaves it as it was; passing null for a field clears it. For attachments, an empty array also removes them all. Passing text or html replaces the whole body: the body part you leave out of that call becomes empty. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     draftId: z
       .string()
       .nonempty()
@@ -1119,7 +1112,7 @@ const REMOVE_INBOX_DRAFT_TOOL = {
   title: 'Remove Inbox Draft',
   description: `Remove a draft by ID from a Resend inbox. The draft was never sent, so no mail and no thread is touched, but everything written in it is thrown away. Before using this tool, you MUST double-check with the user that they want to remove this draft. Reference the SUBJECT of the draft when double-checking, and warn the user that removing a draft is irreversible and discards whatever was composed in it. You may only use this tool if the user explicitly confirms they want to remove the draft after you double-check. Get the draft ID from list-inbox-drafts.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     draftId: z
       .string()
       .nonempty()
@@ -1136,7 +1129,7 @@ const SEND_INBOX_DRAFT_TOOL = {
   title: 'Send Inbox Draft',
   description: `Send a draft from a Resend inbox. This puts a real email in the mail the moment you call it, from the inbox's address to the recipients the draft already carries, and a sent email CANNOT be recalled or unsent. Before using this tool, you MUST double-check with the user that they want to send this draft. Reference the SUBJECT and the RECIPIENTS of the draft when double-checking, and warn the user that sending cannot be undone. You may only use this tool if the user explicitly confirms they want to send the draft after you double-check. The draft must have at least one "to" recipient and an html or text body, or the send fails. A standalone draft also needs a subject. A reply draft with an empty subject is sent with the thread's subject, prefixed with "Re:" when it does not already start with it. The whole email, encoded, can be at most 40 MB. Call get-inbox-draft first if you need to read back exactly what will go out, and update-inbox-draft to change it before sending. Get the draft ID from list-inbox-drafts. Returns the sent email's id.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     draftId: z
       .string()
       .nonempty()
@@ -1168,7 +1161,7 @@ const SEND_NEW_INBOX_EMAIL_TOOL = {
 
 **When to use:** User asks to send, write, or email someone from an inbox ("send an email from the support inbox", "email the customer as sales@"), and has given you the recipients and the wording. Before using this tool, you MUST double-check with the user that they want to send this email. Reference the RECIPIENTS, the SUBJECT, and the WORDING you are about to send when double-checking, and warn the user that a sent email cannot be recalled. You may only use this tool if the user explicitly confirms they want to send the email after you double-check. The email is created as a draft in the inbox and then sent: if sending fails once the draft exists, the error names the draft ID, so retry with send-inbox-draft or discard it with remove-inbox-draft rather than composing it again. Get the inbox ID from list-inboxes.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     to: z
       .union([email, email.array().min(1)])
       .describe(
@@ -1220,9 +1213,9 @@ const GET_INBOX_AGENT_TOOL = {
     destructiveHint: false,
   },
   title: 'Get Inbox Agent',
-  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no actions. The tone is one of the presets ${INBOX_AGENT_TONES.join(', ')}. Pass the inbox ID or the inbox email address; get the ID from list-inboxes.`,
+  description: `Get the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and the actions it is allowed to take on the inbox's threads. An inbox whose agent was never configured returns empty settings: no instructions, no tone, no actions. The tone is one of the presets ${INBOX_AGENT_TONES.join(', ')}.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
   }),
 } as const;
 
@@ -1235,7 +1228,7 @@ const UPDATE_INBOX_AGENT_TOOL = {
   title: 'Update Inbox Agent',
   description: `Update the AI agent settings of a Resend inbox: the instructions the agent follows, the tone it writes in, and/or the actions it is allowed to take on the inbox's threads. At least one of the three is required. A field left out keeps its current value, and "actions" replaces the whole set when passed, so include every action that should stay enabled. Use get-inbox-agent to read the current settings first.`,
   inputSchema: z.object({
-    inboxId: inboxIdInput(),
+    inboxId: INBOX_ID_INPUT,
     instructions: z
       .string()
       .trim()
@@ -1738,7 +1731,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       }
 
       const response = await resend.inboxes.threads.list({
-        inboxId,
+        ...inboxSelector(inboxId),
         folders: asArray(folders),
         labels: asArray(labels),
         read,
@@ -1784,7 +1777,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       }
 
       const response = await resend.inboxes.threads.search({
-        inboxId,
+        ...inboxSelector(inboxId),
         query,
         from: asArray(from),
         to: asArray(to),
@@ -1821,12 +1814,15 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         );
       }
 
-      const response = await resend.inboxes.threads.get({ inboxId, threadId });
+      const response = await resend.inboxes.threads.get({
+        ...inboxSelector(inboxId),
+        threadId,
+      });
 
       throwIfResendFailed(response, 'Failed to get inbox thread');
 
       const emails = await resend.inboxes.threads.emails.list({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         ...cursorPagination(limit ?? 100, after, before),
       });
@@ -1872,7 +1868,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       }
 
       const response = await resend.inboxes.threads.emails.list({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         ...cursorPagination(limit, after, before),
       });
@@ -1914,7 +1910,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       }
 
       const response = await resend.inboxes.threads.update({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         read,
         folder,
@@ -1948,7 +1944,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     ADD_INBOX_THREAD_LABELS_TOOL,
     async ({ inboxId, threadId, labelIds }) => {
       const response = await resend.inboxes.threads.labels.add({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         labels: Array.isArray(labelIds) ? labelIds : [labelIds],
       });
@@ -1969,7 +1965,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     SET_INBOX_THREAD_LABELS_TOOL,
     async ({ inboxId, threadId, labelIds }) => {
       const response = await resend.inboxes.threads.labels.set({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         labels: labelIds,
       });
@@ -1990,7 +1986,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     REMOVE_INBOX_THREAD_LABEL_TOOL,
     async ({ inboxId, threadId, labelId }) => {
       const response = await resend.inboxes.threads.labels.remove({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         labelId,
       });
@@ -2011,7 +2007,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     REMOVE_INBOX_THREAD_TOOL,
     async ({ inboxId, threadId }) => {
       const response = await resend.inboxes.threads.remove({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
       });
 
@@ -2036,7 +2032,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     GET_INBOX_THREAD_EMAIL_TOOL,
     async ({ inboxId, threadId, emailId }) => {
       const response = await resend.inboxes.threads.emails.get({
-        inboxId,
+        ...inboxSelector(inboxId),
         threadId,
         emailId,
       });
@@ -2107,7 +2103,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
 
       const response = await resend.inboxes.threads.emails.reply(
         {
-          inboxId,
+          ...inboxSelector(inboxId),
           threadId,
           emailId,
           html,
@@ -2153,7 +2149,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     }) => {
       const response = await resend.inboxes.threads.emails.forward(
         {
-          inboxId,
+          ...inboxSelector(inboxId),
           threadId,
           emailId,
           to,
@@ -2184,7 +2180,9 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'list-inbox-labels',
     LIST_INBOX_LABELS_TOOL,
     async ({ inboxId }) => {
-      const response = await resend.inboxes.labels.list({ inboxId });
+      const response = await resend.inboxes.labels.list({
+        ...inboxSelector(inboxId),
+      });
 
       throwIfResendFailed(response, 'Failed to list inbox labels');
 
@@ -2215,7 +2213,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     CREATE_INBOX_LABEL_TOOL,
     async ({ inboxId, name, color }) => {
       const response = await resend.inboxes.labels.create({
-        inboxId,
+        ...inboxSelector(inboxId),
         name,
         color: color as InboxLabelColor | undefined,
       });
@@ -2236,7 +2234,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     UPDATE_INBOX_LABEL_TOOL,
     async ({ inboxId, labelId, name, color }) => {
       const response = await resend.inboxes.labels.update({
-        inboxId,
+        ...inboxSelector(inboxId),
         labelId,
         name,
         color: color as InboxLabelColor | undefined,
@@ -2257,7 +2255,10 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'remove-inbox-label',
     REMOVE_INBOX_LABEL_TOOL,
     async ({ inboxId, labelId }) => {
-      const response = await resend.inboxes.labels.remove({ inboxId, labelId });
+      const response = await resend.inboxes.labels.remove({
+        ...inboxSelector(inboxId),
+        labelId,
+      });
 
       throwIfResendFailed(response, 'Failed to remove inbox label');
 
@@ -2284,7 +2285,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       }
 
       const response = await resend.inboxes.drafts.list({
-        inboxId,
+        ...inboxSelector(inboxId),
         ...cursorPagination(limit, after, before),
       });
 
@@ -2380,7 +2381,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
 
       const response = await resend.inboxes.drafts.create(
         {
-          inboxId,
+          ...inboxSelector(inboxId),
           to,
           cc,
           bcc,
@@ -2412,7 +2413,10 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'get-inbox-draft',
     GET_INBOX_DRAFT_TOOL,
     async ({ inboxId, draftId }) => {
-      const response = await resend.inboxes.drafts.get({ inboxId, draftId });
+      const response = await resend.inboxes.drafts.get({
+        ...inboxSelector(inboxId),
+        draftId,
+      });
 
       throwIfResendFailed(response, 'Failed to get inbox draft');
 
@@ -2462,7 +2466,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       throwIfTooManyInboxDraftRecipients(to, cc, bcc);
 
       const response = await resend.inboxes.drafts.update({
-        inboxId,
+        ...inboxSelector(inboxId),
         draftId,
         to,
         cc,
@@ -2491,7 +2495,10 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'remove-inbox-draft',
     REMOVE_INBOX_DRAFT_TOOL,
     async ({ inboxId, draftId }) => {
-      const response = await resend.inboxes.drafts.remove({ inboxId, draftId });
+      const response = await resend.inboxes.drafts.remove({
+        ...inboxSelector(inboxId),
+        draftId,
+      });
 
       throwIfResendFailed(response, 'Failed to remove inbox draft');
 
@@ -2512,7 +2519,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     SEND_INBOX_DRAFT_TOOL,
     async ({ inboxId, draftId, headers, idempotencyKey }) => {
       const response = await resend.inboxes.drafts.send(
-        { inboxId, draftId, headers },
+        { ...inboxSelector(inboxId), draftId, headers },
         { idempotencyKey },
       );
 
@@ -2555,14 +2562,14 @@ export function addInboxTools(server: McpServer, resend: Resend) {
       throwIfTooManyInboxDraftRecipients(to, cc, bcc);
 
       const draft = await resend.inboxes.drafts.create(
-        { inboxId, to, cc, bcc, subject, text, html },
+        { ...inboxSelector(inboxId), to, cc, bcc, subject, text, html },
         { idempotencyKey },
       );
 
       throwIfResendFailed(draft, 'Failed to create the email in the inbox');
 
       const sent = await resend.inboxes.drafts.send(
-        { inboxId, draftId: draft.data.id, headers },
+        { ...inboxSelector(inboxId), draftId: draft.data.id, headers },
         { idempotencyKey },
       );
 
@@ -2591,7 +2598,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'get-inbox-agent',
     GET_INBOX_AGENT_TOOL,
     async ({ inboxId }) => {
-      const response = await resend.inboxes.agent.get({ inboxId });
+      const response = await resend.inboxes.agent.get(inboxSelector(inboxId));
 
       throwIfResendFailed(response, 'Failed to get inbox agent settings');
 
@@ -2605,12 +2612,21 @@ export function addInboxTools(server: McpServer, resend: Resend) {
     'update-inbox-agent',
     UPDATE_INBOX_AGENT_TOOL,
     async ({ inboxId, instructions, tone, actions }) => {
-      const settings = { instructions, tone, actions };
-      throwIfMissingInboxAgentSettings(settings);
+      if (
+        instructions === undefined &&
+        tone === undefined &&
+        actions === undefined
+      ) {
+        throw new Error(
+          'You must provide `instructions`, `tone`, or `actions` to update the inbox agent settings.',
+        );
+      }
 
       const response = await resend.inboxes.agent.update({
-        inboxId,
-        ...settings,
+        ...inboxSelector(inboxId),
+        instructions,
+        tone,
+        actions,
       } as UpdateInboxAgentOptions);
 
       throwIfResendFailed(response, 'Failed to update inbox agent settings');

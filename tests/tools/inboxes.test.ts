@@ -1570,7 +1570,7 @@ describe('inbox tools', () => {
     });
 
     expect(addInboxThreadLabels).toHaveBeenCalledWith({
-      inboxId: 'support@example.com',
+      emailAddress: 'support@example.com',
       threadId: THREAD_ID,
       labels: [LABEL_ID, OTHER_LABEL_ID],
     });
@@ -1716,7 +1716,7 @@ describe('inbox tools', () => {
     });
 
     expect(removeInboxThreadLabel).toHaveBeenCalledWith({
-      inboxId: 'support@example.com',
+      emailAddress: 'support@example.com',
       threadId: THREAD_ID,
       labelId: LABEL_ID,
     });
@@ -3431,7 +3431,7 @@ describe('inbox tools', () => {
     });
 
     expect(getInboxAgent).toHaveBeenCalledWith({
-      inboxId: 'support@example.com',
+      emailAddress: 'support@example.com',
     });
     expect(textOf(result as never)).toBe(
       'Instructions: Answer refund questions yourself.\nTone: concise_casual\nActions: draft_reply, add_labels, archive, move_to_trash',
