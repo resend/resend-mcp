@@ -215,6 +215,7 @@ describe('dual-era protocol support', () => {
   async function connectedClient(
     port: number,
     era: 'legacy' | 'modern',
+    authorization = 'Bearer re_test_key',
   ): Promise<Client> {
     const client = new Client(
       { name: `test-client-${era}`, version: '0.0.0' },
@@ -224,7 +225,7 @@ describe('dual-era protocol support', () => {
     );
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${port}/mcp`),
-      { requestInit: { headers: { Authorization: 'Bearer re_test_key' } } },
+      { requestInit: { headers: { Authorization: authorization } } },
     );
     await client.connect(transport);
     return client;
@@ -255,6 +256,22 @@ describe('dual-era protocol support', () => {
     expect(tools.map((t) => t.name)).toContain('ping');
     const result = await client.callTool({ name: 'ping', arguments: {} });
     expect(result.content).toEqual([{ type: 'text', text: 'pong' }]);
+
+    await client.close();
+    server.close();
+  });
+
+  it.each([
+    'legacy',
+    'modern',
+  ] as const)('a %s client can authenticate with a lowercase bearer scheme', async (era) => {
+    const server = await runHttpWithPingTool({ replierEmailAddresses: [] }, 0);
+    const { port } = server.address() as AddressInfo;
+    const client = await connectedClient(port, era, 'bearer re_test_key');
+
+    expect(client.getProtocolEra()).toBe(era);
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toContain('ping');
 
     await client.close();
     server.close();
