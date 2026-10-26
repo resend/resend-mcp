@@ -360,6 +360,114 @@ describe('sdkResponseToWorkflow', () => {
   });
 });
 
+describe('API response configuration', () => {
+  const cases = [
+    {
+      type: 'trigger' as const,
+      config: { event_name: 'user.created' },
+      expected: { eventName: 'user.created' },
+    },
+    {
+      type: 'send_email' as const,
+      config: {
+        reply_to: 'help@example.com',
+        template: {
+          id: 'tmpl_1',
+          variables: { first_name: { var: 'contact.first_name' } },
+        },
+      },
+      expected: {
+        replyTo: 'help@example.com',
+        template: {
+          id: 'tmpl_1',
+          variables: { first_name: { var: 'contact.first_name' } },
+        },
+      },
+    },
+    {
+      type: 'wait_for_event' as const,
+      config: {
+        event_name: 'resend:email.opened',
+        timeout: '1 hour',
+        filter_rule: {
+          type: 'rule',
+          field: 'event.first_name',
+          operator: 'eq',
+          value: 0,
+        },
+      },
+      expected: {
+        eventName: 'resend:email.opened',
+        timeout: '1 hour',
+        filterRule: {
+          type: 'rule',
+          field: 'event.first_name',
+          operator: 'eq',
+          value: 0,
+        },
+      },
+    },
+    {
+      type: 'contact_update' as const,
+      config: {
+        first_name: '',
+        last_name: { var: 'event.last_name' },
+        unsubscribed: false,
+        properties: { first_name: 'custom property', score: 0 },
+      },
+      expected: {
+        firstName: '',
+        lastName: { var: 'event.last_name' },
+        unsubscribed: false,
+        properties: { first_name: 'custom property', score: 0 },
+      },
+    },
+    {
+      type: 'add_to_segment' as const,
+      config: { segment_id: 'seg_1' },
+      expected: { segmentId: 'seg_1' },
+    },
+  ];
+
+  for (const { type, config, expected } of cases) {
+    it(`returns SDK input fields for ${type}`, () => {
+      const workflow = sdkResponseToWorkflow(
+        [{ key: 'step', type, config }],
+        [],
+      );
+      expect(workflow.steps[0].config).toEqual(expected);
+    });
+  }
+
+  it('does not add optional fields absent from the API response', () => {
+    const workflow = sdkResponseToWorkflow(
+      [
+        {
+          key: 'email',
+          type: 'send_email',
+          config: { template: { id: 'tmpl_1' } },
+        },
+        {
+          key: 'contact',
+          type: 'contact_update',
+          config: { unsubscribed: false },
+        },
+      ],
+      [],
+    );
+    expect(workflow.steps.map((step) => step.config)).toEqual([
+      { template: { id: 'tmpl_1' } },
+      { unsubscribed: false },
+    ]);
+  });
+
+  it('does not change the API response object', () => {
+    const config = Object.freeze({ event_name: 'user.created' });
+    sdkResponseToWorkflow([{ key: 'trigger', type: 'trigger', config }], []);
+    expect(config).toEqual({ event_name: 'user.created' });
+  });
+});
+
 describe('round-trip', () => {
   it('workflow -> SDK -> workflow preserves structure', () => {
     const original: WorkflowDefinition = {
