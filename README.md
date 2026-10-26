@@ -362,6 +362,7 @@ You can pass additional arguments to configure the local server:
 - `--port`: HTTP port when using `--http` (default: 3000, or `MCP_PORT` env var)
 - `--host`: Host for DNS-rebinding protection when using `--http` (default: `127.0.0.1`, or `MCP_HOST`). Set to `0.0.0.0` to disable `Host` validation behind a proxy/load balancer.
 - `--allowed-hosts`: Comma-separated `Host` allow-list when using `--http` (or `MCP_ALLOWED_HOSTS`)
+- `--allowed-file-dirs`: Comma-separated directories that local file attachments and CSV imports may be read from (or `MCP_ALLOWED_FILE_DIRS`). Unrestricted on stdio when unset; always disabled over `--http` unless set.
 
 **Environment variables:**
 
@@ -371,9 +372,13 @@ You can pass additional arguments to configure the local server:
 - `MCP_PORT`: HTTP port when using `--http` (optional)
 - `MCP_HOST`: Host for DNS-rebinding protection when using `--http` (optional)
 - `MCP_ALLOWED_HOSTS`: Comma-separated `Host` allow-list when using `--http` (optional)
+- `MCP_ALLOWED_FILE_DIRS`: Comma-separated directories local files may be read from (optional)
 
 > [!NOTE]
 > If you don't provide a sender email address, the MCP server will ask you to provide one each time you call the tool.
+
+> [!WARNING]
+> `send-email` (`attachments[].filePath`) and `create-contact-import` (`filePath`) read local files. Over `--http` this is disabled by default so remote clients can't read the server's disk; use `--allowed-file-dirs` to opt in for specific directories. On stdio, set `--allowed-file-dirs` to stop a prompt-injected agent from attaching files outside the folders you choose.
 
 ## MCP Server Tools
 
@@ -381,6 +386,7 @@ Resend's MCP server gives your AI agent native access to the full Resend platfor
 
 - **Emails**: Send, list, get, cancel, update, share, and batch send emails. Retrieve delivery and engagement metrics. Supports HTML, plain text, attachments (local file, URL, or base64), CC/BCC, reply-to, scheduling, tags, custom headers, topic-based sending, and idempotency keys.
 - **Received Emails**: List and read inbound emails. List and download received email attachments.
+- **Inboxes**: Create, list, get, update, and remove inboxes. Read and update the inbox agent settings. List, search, get, update, and remove threads, and add, set, or remove their labels. List and get thread emails, and reply to or forward them with attachments and custom headers. Create, list, update, and remove labels. Create, list, get, update, remove, and send drafts, with attachments. Send a new email from an inbox to start a thread. Supports idempotency keys when replying, forwarding, creating drafts, sending drafts, and sending new emails.
 - **Templates**: Create, list, get, update, publish, duplicate, and remove email templates. Supports composing template content and `{{{VARIABLE}}}` placeholders.
 - **Contacts**: Create, list, get, update, and remove contacts. Manage segment memberships, topic subscriptions, and CSV contact imports. Supports custom contact properties.
 - **Broadcasts**: Create, send, cancel, duplicate, list, get, update, and remove broadcast campaigns. List a broadcast's clicked links, and its recipients by event type (sent, delivered, opened, clicked, bounced, complained, unsubscribed, suppressed). Supports scheduling, personalization placeholders, and preview text.
