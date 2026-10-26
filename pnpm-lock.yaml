@@ -30,8 +30,8 @@ importers:
         specifier: 6.34.1
         version: 6.34.1
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@biomejs/biome':
         specifier: 2.4.10
@@ -1018,6 +1018,9 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+
 snapshots:
 
   '@biomejs/biome@2.4.10':
@@ -1824,3 +1827,5 @@ snapshots:
   wrappy@1.0.2: {}
 
   zod@4.4.3: {}
+
+  zod@4.6.6: {}
