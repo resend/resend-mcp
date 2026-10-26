@@ -140,6 +140,7 @@ export function sdkResponseToWorkflow(
 
   for (const step of responseSteps) {
     const config = { ...step.config };
+    // Step types added to the API after this SDK version pass through as-is.
     for (const [apiField, sdkField] of Object.entries(
       RESPONSE_CONFIG_FIELDS[step.type] ?? {},
     )) {

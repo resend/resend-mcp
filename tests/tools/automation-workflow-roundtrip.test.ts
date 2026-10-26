@@ -6,7 +6,7 @@ import {
   type GetAutomationResponseSuccess,
   Resend,
 } from 'resend';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { WorkflowDefinition } from '../../src/lib/workflow-converter.js';
 import { createMcpServer } from '../../src/server.js';
 
@@ -107,10 +107,6 @@ interface UpdatePayload {
   }>;
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 async function editRetrievedWorkflow(): Promise<UpdatePayload> {
   let updatePayload: UpdatePayload | undefined;
   vi.stubGlobal(
@@ -170,24 +166,31 @@ async function editRetrievedWorkflow(): Promise<UpdatePayload> {
 }
 
 describe('editing a retrieved automation through the SDK HTTP serializer', () => {
+  let payload: UpdatePayload;
+
+  beforeAll(async () => {
+    payload = await editRetrievedWorkflow();
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
   for (const step of steps.filter((step) => step.type !== 'delay')) {
-    it(`preserves ${step.type} configuration when another step is edited`, async () => {
-      const payload = await editRetrievedWorkflow();
+    it(`preserves ${step.type} configuration when another step is edited`, () => {
       expect(
         payload.steps.find((item) => item.key === step.key)?.config,
       ).toEqual(step.config);
     });
   }
 
-  it('applies the requested delay edit', async () => {
-    const payload = await editRetrievedWorkflow();
+  it('applies the requested delay edit', () => {
     expect(payload.steps.find((step) => step.key === 'delay')?.config).toEqual({
       duration: '2 hours',
     });
   });
 
-  it('preserves both condition and wait-for-event branch destinations', async () => {
-    const payload = await editRetrievedWorkflow();
+  it('preserves both condition and wait-for-event branch destinations', () => {
     expect(
       payload.connections.map((connection) => ({
         ...connection,
