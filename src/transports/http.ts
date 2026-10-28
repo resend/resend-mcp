@@ -35,21 +35,23 @@ function sendJsonRpcError(
 }
 
 /**
- * Extract the Resend API key from the Authorization: Bearer header.
+ * Extract the Resend API key from an Authorization: Bearer header value.
+ * The scheme is matched case-insensitively (RFC 9110, section 11.1).
  * Returns null if the header is missing or malformed.
  */
-function extractBearerToken(req: IncomingMessage): string | null {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) return null;
+function parseBearerToken(header: string | null | undefined): string | null {
+  if (!header || header.slice(0, 'Bearer '.length).toLowerCase() !== 'bearer ')
+    return null;
   const token = header.slice('Bearer '.length).trim();
   return token || null;
 }
 
+function extractBearerToken(req: IncomingMessage): string | null {
+  return parseBearerToken(req.headers.authorization);
+}
+
 function extractBearerTokenFromWebRequest(req: Request): string | null {
-  const header = req.headers.get('authorization');
-  if (!header || !header.startsWith('Bearer ')) return null;
-  const token = header.slice('Bearer '.length).trim();
-  return token || null;
+  return parseBearerToken(req.headers.get('authorization'));
 }
 
 export interface HttpTransportOptions {
