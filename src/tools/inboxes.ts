@@ -62,6 +62,16 @@ function cursorPagination(
   return { limit };
 }
 
+function attachmentUrlInput() {
+  return z
+    .string()
+    .url()
+    .refine(
+      (url) => /^https?:\/\//.test(url) && !url.startsWith('http://localhost:'),
+      'The URL must start with http:// or https:// and cannot start with http://localhost:.',
+    );
+}
+
 function inboxAttachmentsInput(limitNote: string) {
   return z
     .object({
@@ -76,14 +86,7 @@ function inboxAttachmentsInput(limitNote: string) {
         .describe(
           'Base64-encoded file content. Use `url` instead for files larger than a few hundred kilobytes. Provide content or url.',
         ),
-      url: z
-        .string()
-        .url()
-        .refine(
-          (url) =>
-            /^https?:\/\//.test(url) && !url.startsWith('http://localhost:'),
-          'The URL must start with http:// or https:// and cannot start with http://localhost:.',
-        )
+      url: attachmentUrlInput()
         .optional()
         .describe(
           'URL where the file is hosted. Resend fetches it when the email is sent. It must start with http:// or https:// and cannot start with http://localhost:. A URL Resend cannot fetch fails the email when it is sent, not this call. Provide content or url.',
@@ -137,16 +140,56 @@ function inboxDraftAttachmentsInput(note: string) {
         .string()
         .nonempty()
         .describe('Name of the file with extension (e.g. "quote.pdf").'),
-      content: z.string().nonempty().describe('Base64-encoded file content.'),
+      content: z
+        .string()
+        .nonempty()
+        .optional()
+        .describe(
+          'Base64-encoded file content. Requires contentType. Provide content or url, not both.',
+        ),
+      url: attachmentUrlInput()
+        .optional()
+        .describe(
+          'URL where the file is hosted. Resend downloads it when the draft is saved, so a URL Resend cannot download fails this call. It must start with http:// or https:// and cannot start with http://localhost:. Provide content or url, not both.',
+        ),
       contentType: z
         .string()
         .nonempty()
-        .describe('MIME type of the file (e.g. "application/pdf").'),
+        .optional()
+        .describe(
+          'MIME type of the file (e.g. "application/pdf"). Required with content; with url, defaults to the downloaded file\'s type.',
+        ),
     })
     .array()
     .describe(
-      `Files to store on the draft. Each one needs filename, base64 content and contentType; a draft cannot attach a file by URL. Together they can total at most 25 MB. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
+      `Files to store on the draft. Each attachment needs \`filename\` plus either \`content\` (base64, with \`contentType\`) or \`url\` (an http(s) URL Resend downloads; \`contentType\` defaults to the downloaded file's type). Together they can total at most 25 MB, downloads included, and every download must finish within 20 seconds. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
     );
+}
+
+type InboxDraftAttachmentInput = {
+  filename: string;
+  content?: string;
+  url?: string;
+  contentType?: string;
+};
+
+function inboxDraftAttachments(attachments: InboxDraftAttachmentInput[]) {
+  return attachments.map(({ filename, content, url, contentType }) => {
+    if (content !== undefined && url === undefined) {
+      if (contentType === undefined) {
+        throw new Error(
+          `Attachment "${filename}" needs \`contentType\` with \`content\`.`,
+        );
+      }
+      return { filename, content, contentType };
+    }
+    if (url !== undefined && content === undefined) {
+      return { filename, path: url, contentType };
+    }
+    throw new Error(
+      `Attachment "${filename}" needs exactly one of \`content\` or \`url\`.`,
+    );
+  });
 }
 
 type InboxAttachmentInput = {
@@ -2403,7 +2446,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
           html,
           threadId,
           replyToEmailId,
-          attachments,
+          attachments: attachments && inboxDraftAttachments(attachments),
         } as CreateInboxDraftOptions,
         { idempotencyKey },
       );
@@ -2487,7 +2530,7 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         subject,
         text,
         html,
-        attachments,
+        attachments: attachments && inboxDraftAttachments(attachments),
       } as UpdateInboxDraftOptions);
 
       throwIfResendFailed(response, 'Failed to update inbox draft');
