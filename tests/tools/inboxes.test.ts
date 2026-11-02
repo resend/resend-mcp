@@ -33,6 +33,7 @@ const removeInboxDraft = vi.fn();
 const sendInboxDraft = vi.fn();
 const getInboxAgent = vi.fn();
 const updateInboxAgent = vi.fn();
+const getEmail = vi.fn();
 
 const inboxes = {
   create: createInbox,
@@ -78,7 +79,9 @@ const inboxes = {
   },
 };
 
-const resend = { inboxes } as unknown as Resend;
+const emails = { get: getEmail };
+
+const resend = { inboxes, emails } as unknown as Resend;
 
 const INBOX_ID = 'inbox_2ZbUCwvGmIT4mLIN6d3Yz0Ainbd';
 const OTHER_INBOX_ID = 'inbox_3aCvDxwHnJU5nMJO7e4Za1Bjoce';
@@ -86,6 +89,7 @@ const THREAD_ID = 'thread_4bDwEyxIoKV6oNKP8f5Ab2Ckpdf';
 const OTHER_THREAD_ID = 'thread_5cExFzyJpLW7pOLQ9g6Bc3Dlqeg';
 const EMAIL_ID = '5c8e6a12-9f3b-4c7d-8e21-0b7a9d4e1f30';
 const SENT_EMAIL_ID = '7e0f8c34-1b5d-4e9f-a043-2d9cbf60310a';
+const OTHER_SENT_EMAIL_ID = '9a2b1d56-3c7e-4f01-b265-4e1dc0825c2b';
 const LABEL_ID = 'label_6dFyGzzKqMX8qPMR0h7Cd4Emrfh';
 const OTHER_LABEL_ID = 'label_7eGzHaaLrNY9rQNS1i8De5Fnsgi';
 const DRAFT_ID = 'draft_8fHzIbbMsOZ0sROT2j9Ef6Gothj';
@@ -178,6 +182,7 @@ describe('inbox tools', () => {
       'get-inbox-thread',
       'list-inbox-thread-emails',
       'get-inbox-thread-email',
+      'get-inbox-thread-delivery-status',
       'list-inbox-labels',
       'list-inbox-drafts',
       'get-inbox-draft',
@@ -254,7 +259,7 @@ describe('inbox tools', () => {
     }
   });
 
-  it('registers one tool per inbox endpoint, plus send-new-inbox-email', async () => {
+  it('registers one tool per inbox endpoint, plus send-new-inbox-email and get-inbox-thread-delivery-status', async () => {
     const client = await makeClient();
     const { tools } = await client.listTools();
 
@@ -283,6 +288,7 @@ describe('inbox tools', () => {
         'get-inbox-thread-email',
         'reply-to-inbox-thread-email',
         'forward-inbox-thread-email',
+        'get-inbox-thread-delivery-status',
         'list-inbox-drafts',
         'create-inbox-draft',
         'get-inbox-draft',
@@ -3686,6 +3692,222 @@ describe('inbox tools', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain(
       'Failed to list inbox thread emails',
+    );
+  });
+
+  it('get-inbox-thread-delivery-status looks up the last event of each outbound email', async () => {
+    const sentMessage = {
+      ...INBOUND_MESSAGE,
+      id: SENT_EMAIL_ID,
+      direction: 'outbound',
+      from: 'support@example.com',
+      to: ['customer@example.com'],
+      cc: [],
+      subject: 'Re: Refund request',
+      received_at: '2026-09-10T09:00:00.000Z',
+    };
+    listInboxThreadEmails.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          INBOUND_MESSAGE,
+          sentMessage,
+          { ...sentMessage, id: OTHER_SENT_EMAIL_ID },
+        ],
+      },
+      error: null,
+    });
+    getEmail.mockImplementation(async (id: string) => ({
+      data: {
+        object: 'email',
+        id,
+        last_event: id === SENT_EMAIL_ID ? 'delivered' : 'bounced',
+      },
+      error: null,
+    }));
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+    });
+
+    expect(listInboxThreadEmails).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      threadId: THREAD_ID,
+      limit: 100,
+    });
+    expect(getEmail).toHaveBeenCalledTimes(2);
+    expect(getEmail).toHaveBeenNthCalledWith(1, SENT_EMAIL_ID);
+    expect(getEmail).toHaveBeenNthCalledWith(2, OTHER_SENT_EMAIL_ID);
+    expect(getEmail).not.toHaveBeenCalledWith(EMAIL_ID);
+
+    const blocks = (result.content as Array<{ text: string }>).map(
+      (c) => c.text,
+    );
+    expect(blocks[0]).toBe('Found 3 emails, 2 outbound:');
+    expect(blocks[1]).toContain(`Email ID: ${EMAIL_ID}`);
+    expect(blocks[1]).toContain('Direction: inbound');
+    expect(blocks[1]).toContain('Status: not tracked (inbound message)');
+    expect(blocks[2]).toContain(`Email ID: ${SENT_EMAIL_ID}`);
+    expect(blocks[2]).toContain('Direction: outbound');
+    expect(blocks[2]).toContain('From: support@example.com');
+    expect(blocks[2]).toContain('Subject: Re: Refund request');
+    expect(blocks[2]).toContain('Received at: 2026-09-10T09:00:00.000Z');
+    expect(blocks[2]).toContain('Status: delivered');
+    expect(blocks[3]).toContain(`Email ID: ${OTHER_SENT_EMAIL_ID}`);
+    expect(blocks[3]).toContain('Status: bounced');
+    const text = textOf(result as never);
+    expect(text).not.toContain('Please refund my order');
+    expect(text).not.toContain('Pass after=');
+  });
+
+  it('get-inbox-thread-delivery-status does not call get-email for a thread with only inbound emails', async () => {
+    listInboxThreadEmails.mockResolvedValue({
+      data: { object: 'list', has_more: false, data: [INBOUND_MESSAGE] },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: { inboxId: 'support@example.com', threadId: THREAD_ID },
+    });
+
+    expect(listInboxThreadEmails).toHaveBeenCalledWith({
+      emailAddress: 'support@example.com',
+      threadId: THREAD_ID,
+      limit: 100,
+    });
+    expect(getEmail).not.toHaveBeenCalled();
+    const text = textOf(result as never);
+    expect(text).toContain('Found 1 email, 0 outbound:');
+    expect(text).toContain('Status: not tracked (inbound message)');
+  });
+
+  it('get-inbox-thread-delivery-status forwards the cursor and hints at the next page', async () => {
+    listInboxThreadEmails.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: true,
+        data: [
+          { ...INBOUND_MESSAGE, id: SENT_EMAIL_ID, direction: 'outbound' },
+        ],
+      },
+      error: null,
+    });
+    getEmail.mockResolvedValue({
+      data: { object: 'email', id: SENT_EMAIL_ID, last_event: 'sent' },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        limit: 1,
+        after: EMAIL_ID,
+      },
+    });
+
+    expect(listInboxThreadEmails).toHaveBeenCalledWith({
+      inboxId: INBOX_ID,
+      threadId: THREAD_ID,
+      limit: 1,
+      after: EMAIL_ID,
+    });
+    const text = textOf(result as never);
+    expect(text).toContain('Status: sent');
+    expect(text).toContain(`Pass after=${SENT_EMAIL_ID}`);
+  });
+
+  it('get-inbox-thread-delivery-status says when a thread holds no emails', async () => {
+    listInboxThreadEmails.mockResolvedValue({
+      data: { object: 'list', has_more: false, data: [] },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+    });
+
+    expect(getEmail).not.toHaveBeenCalled();
+    expect(textOf(result as never)).toBe('No emails found.');
+  });
+
+  it('get-inbox-thread-delivery-status refuses both "after" and "before"', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: {
+        inboxId: INBOX_ID,
+        threadId: THREAD_ID,
+        after: EMAIL_ID,
+        before: SENT_EMAIL_ID,
+      },
+    });
+
+    expect(listInboxThreadEmails).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it('get-inbox-thread-delivery-status surfaces a failure listing the emails', async () => {
+    listInboxThreadEmails.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'not_found',
+        statusCode: 404,
+        message: 'Thread not found',
+      },
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+    });
+
+    expect(getEmail).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain(
+      'Failed to list inbox thread emails',
+    );
+  });
+
+  it('get-inbox-thread-delivery-status surfaces a failure getting an email', async () => {
+    listInboxThreadEmails.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          { ...INBOUND_MESSAGE, id: SENT_EMAIL_ID, direction: 'outbound' },
+        ],
+      },
+      error: null,
+    });
+    getEmail.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'not_found',
+        statusCode: 404,
+        message: 'Email not found',
+      },
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'get-inbox-thread-delivery-status',
+      arguments: { inboxId: INBOX_ID, threadId: THREAD_ID },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain(
+      `Failed to get the delivery status of email ${SENT_EMAIL_ID}`,
     );
   });
 

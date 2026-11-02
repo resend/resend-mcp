@@ -817,6 +817,49 @@ const FORWARD_INBOX_THREAD_EMAIL_TOOL = {
   }),
 } as const;
 
+const GET_INBOX_THREAD_DELIVERY_STATUS_TOOL = {
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+    destructiveHint: false,
+  },
+  title: 'Get Inbox Thread Delivery Status',
+  description: `**Purpose:** Find out whether the emails an inbox sent in one Resend thread were delivered, bounced, or are still on their way. Lists the thread's emails, oldest first, and looks up the last delivery event of each outbound one.
+
+**NOT for:** Reading a message's body (use get-inbox-thread-email). Not for the thread's folder, labels or read state (use get-inbox-thread). Not for one email whose ID you already have (use get-email, which also returns its content).
+
+**Returns:** For each email: its email ID, direction (inbound or outbound), from, to, subject, received_at, and its status. For an outbound email the status is the last event Resend recorded for it: queued, scheduled, sent, delivered, delivery_delayed, bounced, complained, failed, suppressed, canceled, opened or clicked. An inbound email has no delivery status, because the inbox received it.
+
+**When to use:** After replying to or forwarding a message in a thread, or sending a draft in it, to check that the email reached its recipient, or when the user asks whether a conversation bounced. The thread's messages carry no delivery status and delivery events carry no thread ID, so this tool joins the two: it calls get-email once for each outbound email on the page. Emails are paginated: when more exist, pass the last email's ID back as "after". When paging backward with "before", pass the first email's ID back as "before".`,
+  inputSchema: z.object({
+    inboxId: INBOX_ID_INPUT,
+    threadId: z.string().nonempty().describe('Thread ID'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe(
+        'Number of emails to check. Default: 100, Max: 100, Min: 1. Emails are oldest first.',
+      ),
+    after: z
+      .string()
+      .nonempty()
+      .optional()
+      .describe(
+        'Email ID after which to retrieve more (the next, newer page). Cannot be used with "before". An ID that is not a message of this thread returns a 404.',
+      ),
+    before: z
+      .string()
+      .nonempty()
+      .optional()
+      .describe(
+        'Email ID before which to retrieve more (the previous, older page). Cannot be used with "after". An ID that is not a message of this thread returns a 404.',
+      ),
+  }),
+} as const;
+
 const LIST_INBOX_LABELS_TOOL = {
   annotations: {
     readOnlyHint: true,
@@ -1338,6 +1381,35 @@ function inboxThreadEmailsContinuation(
     },
   ];
 }
+
+function inboxThreadDeliveryText(
+  message: Pick<
+    InboxMessage,
+    | 'id'
+    | 'direction'
+    | 'from'
+    | 'to'
+    | 'cc'
+    | 'bcc'
+    | 'subject'
+    | 'received_at'
+  >,
+  status: string,
+) {
+  return [
+    ...inboxMessageHeaderLines(message),
+    `Subject: ${message.subject ?? '(no subject)'}`,
+    `Received at: ${message.received_at}`,
+    `Status: ${status}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+const INBOUND_DELIVERY_STATUS = 'not tracked (inbound message)';
+
+const DELIVERY_STATUS_HINT =
+  'Status is the last event Resend recorded for each outbound email. An inbound message has none, because the inbox received it. Pass an outbound "Email ID" to get-email for the email itself, or to get-inbox-thread-email with this inbox ID and this thread ID to read it in the thread.';
 
 function inboxBodyContent(
   message: Pick<InboxMessage, 'html' | 'text'>,
@@ -2178,6 +2250,70 @@ export function addInboxTools(server: McpServer, resend: Resend) {
           { type: 'text', text: 'Forward sent successfully.' },
           { type: 'text', text: `Email ID: ${response.data.id}` },
           { type: 'text', text: SENT_EMAIL_ID_EXPLANATION },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'get-inbox-thread-delivery-status',
+    GET_INBOX_THREAD_DELIVERY_STATUS_TOOL,
+    async ({ inboxId, threadId, limit, after, before }) => {
+      if (after && before) {
+        throw new Error(
+          'Cannot use both "after" and "before" parameters. Use only one for pagination.',
+        );
+      }
+
+      const response = await resend.inboxes.threads.emails.list({
+        ...inboxSelector(inboxId),
+        threadId,
+        ...cursorPagination(limit ?? 100, after, before),
+      });
+
+      throwIfResendFailed(response, 'Failed to list inbox thread emails');
+
+      const messages = response.data.data;
+      if (messages.length === 0) {
+        return {
+          content: [{ type: 'text', text: 'No emails found.' }],
+        };
+      }
+
+      // One get-email call per outbound message, in order rather than in
+      // parallel, so a long thread stays within the API rate limit.
+      const statuses: Array<{ message: InboxMessage; status: string }> = [];
+      for (const message of messages) {
+        if (message.direction !== 'outbound') {
+          statuses.push({ message, status: INBOUND_DELIVERY_STATUS });
+          continue;
+        }
+
+        const email = await resend.emails.get(message.id);
+
+        throwIfResendFailed(
+          email,
+          `Failed to get the delivery status of email ${message.id}`,
+        );
+
+        statuses.push({ message, status: email.data.last_event });
+      }
+
+      const outbound = statuses.filter(
+        ({ message }) => message.direction === 'outbound',
+      ).length;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Found ${messages.length} email${messages.length === 1 ? '' : 's'}, ${outbound} outbound:`,
+          },
+          ...statuses.map(({ message, status }) => ({
+            type: 'text' as const,
+            text: inboxThreadDeliveryText(message, status),
+          })),
+          { type: 'text', text: DELIVERY_STATUS_HINT },
+          ...inboxThreadEmailsContinuation(response.data, before),
         ],
       };
     },
