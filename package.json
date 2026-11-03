@@ -34,7 +34,7 @@
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "dotenv": "17.4.2",
-    "express": "5.2.1",
+    "express": "5.3.0",
     "minimist": "1.2.8",
     "resend": "6.36.0",
     "zod": "4.4.3"
