@@ -162,7 +162,7 @@ function inboxDraftAttachmentsInput(note: string) {
     })
     .array()
     .describe(
-      `Files to store on the draft. Each attachment needs \`filename\` plus either \`content\` (base64, with \`contentType\`) or \`url\` (an http(s) URL Resend downloads; \`contentType\` defaults to the downloaded file's type). Together they can total at most 25 MB, downloads included, and every download must finish within 20 seconds. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
+      `Files to store on the draft. Each attachment needs \`filename\` plus either \`content\` (base64, with \`contentType\`) or \`url\` (an http(s) URL Resend downloads; \`contentType\` defaults to the downloaded file's type). Together they can total at most 25 MB, downloads included, and all downloads together must finish within 20 seconds. An empty file or a blocked file type (such as .exe) is rejected. ${note}`,
     );
 }
 
