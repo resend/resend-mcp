@@ -31,10 +31,12 @@ function buildSendEmailInputSchema(
 ) {
   return {
     to: z
-      .array(z.email())
+      .array(z.string().nonempty())
       .min(1)
       .max(50)
-      .describe('Array of recipient email addresses (1-50 recipients)'),
+      .describe(
+        'Array of recipient email addresses (1-50 recipients), e.g. "jane@example.com" or "Jane Doe <jane@example.com>"',
+      ),
     subject: z.string().describe('Email subject line'),
     text: z.string().describe('Plain text email content'),
     html: z
@@ -44,13 +46,13 @@ function buildSendEmailInputSchema(
         'HTML email content. When provided, the plain text argument MUST be provided as well.',
       ),
     cc: z
-      .array(z.email())
+      .array(z.string().nonempty())
       .optional()
       .describe(
         'Optional array of CC email addresses. You MUST ask the user for this parameter. Under no circumstance provide it yourself',
       ),
     bcc: z
-      .array(z.email())
+      .array(z.string().nonempty())
       .optional()
       .describe(
         'Optional array of BCC email addresses. You MUST ask the user for this parameter. Under no circumstance provide it yourself',
@@ -475,7 +477,7 @@ const SEND_BATCH_EMAILS_TOOL = {
       .array(
         z.object({
           to: z
-            .array(z.email())
+            .array(z.string().nonempty())
             .min(1)
             .max(50)
             .describe('Array of recipient email addresses (1-50 recipients)'),
@@ -494,8 +496,14 @@ const SEND_BATCH_EMAILS_TOOL = {
             .describe(
               'Reply-to email addresses (e.g. "support@example.com" or "Support Team <support@example.com>")',
             ),
-          cc: z.array(z.email()).optional().describe('CC email addresses'),
-          bcc: z.array(z.email()).optional().describe('BCC email addresses'),
+          cc: z
+            .array(z.string().nonempty())
+            .optional()
+            .describe('CC email addresses'),
+          bcc: z
+            .array(z.string().nonempty())
+            .optional()
+            .describe('BCC email addresses'),
           scheduledAt: z
             .string()
             .optional()
