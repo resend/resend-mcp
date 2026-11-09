@@ -228,7 +228,9 @@ export function addEventTools(server: McpServer, resend: Resend) {
                 ? [
                     {
                       type: 'text' as const,
-                      text: 'More events available. Use "after" with the last ID to paginate.',
+                      text: before
+                        ? 'More events available. Use "before" with the first ID to paginate.'
+                        : 'More events available. Use "after" with the last ID to paginate.',
                     },
                   ]
                 : []),
