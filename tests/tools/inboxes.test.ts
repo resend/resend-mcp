@@ -2763,6 +2763,85 @@ describe('inbox tools', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('create-inbox-draft stores an attachment from a url as a path', async () => {
+    createInboxDraft.mockResolvedValue({
+      data: { object: 'inbox_draft', id: DRAFT_ID },
+      error: null,
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        attachments: [
+          { filename: 'invoice.pdf', url: 'https://example.com/invoice.pdf' },
+        ],
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(createInboxDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          { filename: 'invoice.pdf', path: 'https://example.com/invoice.pdf' },
+        ],
+      }),
+      { idempotencyKey: undefined },
+    );
+  });
+
+  it('create-inbox-draft refuses an attachment with both content and url', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        attachments: [
+          {
+            filename: 'invoice.pdf',
+            content: 'aGVsbG8=',
+            contentType: 'application/pdf',
+            url: 'https://example.com/invoice.pdf',
+          },
+        ],
+      },
+    });
+
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it('create-inbox-draft refuses an attachment with neither content nor url', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        attachments: [{ filename: 'invoice.pdf' }],
+      },
+    });
+
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  it('create-inbox-draft refuses a url that is not http or https', async () => {
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'create-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        attachments: [
+          { filename: 'invoice.pdf', url: 'ftp://example.com/invoice.pdf' },
+        ],
+      },
+    });
+
+    expect(createInboxDraft).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
   it('create-inbox-draft refuses a threadId without a replyToEmailId', async () => {
     const client = await makeClient();
     const result = await client.callTool({
@@ -3062,6 +3141,39 @@ describe('inbox tools', () => {
     expect(cleared.isError).toBeFalsy();
     expect(updateInboxDraft).toHaveBeenLastCalledWith(
       expect.objectContaining({ attachments: null }),
+    );
+  });
+
+  it('update-inbox-draft replaces the attachments with one from a url, keeping its content type', async () => {
+    updateInboxDraft.mockResolvedValue({ data: REPLY_DRAFT, error: null });
+
+    const client = await makeClient();
+    const result = await client.callTool({
+      name: 'update-inbox-draft',
+      arguments: {
+        inboxId: INBOX_ID,
+        draftId: DRAFT_ID,
+        attachments: [
+          {
+            filename: 'invoice.pdf',
+            url: 'https://example.com/invoice.pdf',
+            contentType: 'application/pdf',
+          },
+        ],
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(updateInboxDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            filename: 'invoice.pdf',
+            path: 'https://example.com/invoice.pdf',
+            contentType: 'application/pdf',
+          },
+        ],
+      }),
     );
   });
 
