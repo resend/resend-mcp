@@ -351,7 +351,9 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more contacts available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: before
+                    ? 'There are more contacts available. Use the "before" parameter with the first ID to retrieve more.'
+                    : 'There are more contacts available. Use the "after" parameter with the last ID to retrieve more.',
                 },
               ]
             : []),
@@ -599,7 +601,9 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more segments available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: before
+                    ? 'There are more segments available. Use the "before" parameter with the first ID to retrieve more.'
+                    : 'There are more segments available. Use the "after" parameter with the last ID to retrieve more.',
                 },
               ]
             : []),
@@ -677,7 +681,9 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more topics available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: before
+                    ? 'There are more topics available. Use the "before" parameter with the first ID to retrieve more.'
+                    : 'There are more topics available. Use the "after" parameter with the last ID to retrieve more.',
                 },
               ]
             : []),
