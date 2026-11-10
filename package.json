@@ -30,7 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/express": "2.0.0",
+    "@modelcontextprotocol/express": "2.0.2",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "dotenv": "17.4.2",
