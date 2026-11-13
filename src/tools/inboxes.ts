@@ -2323,8 +2323,6 @@ export function addInboxTools(server: McpServer, resend: Resend) {
         };
       }
 
-      // One get-email call per outbound message, in order rather than in
-      // parallel, so a long thread stays within the API rate limit.
       const statuses: Array<{ message: InboxMessage; status: string }> = [];
       for (const message of messages) {
         if (message.direction !== 'outbound') {
