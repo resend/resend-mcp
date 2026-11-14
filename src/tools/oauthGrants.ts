@@ -97,7 +97,9 @@ export function addOAuthGrantTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more OAuth grants available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: before
+                    ? 'There are more OAuth grants available. Use the "before" parameter with the first ID to retrieve more.'
+                    : 'There are more OAuth grants available. Use the "after" parameter with the last ID to retrieve more.',
                 },
               ]
             : []),
