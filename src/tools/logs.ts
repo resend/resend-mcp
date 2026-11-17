@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const LIST_LOGS_TOOL = {
   title: 'List Logs',
@@ -110,7 +111,7 @@ export function addLogTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more logs available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('logs', before),
                 },
               ]
             : []),

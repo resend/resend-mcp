@@ -6,6 +6,7 @@ import type {
   UpdateContactResponse,
 } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const CREATE_CONTACT_TOOL = {
   title: 'Create Contact',
@@ -351,7 +352,7 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more contacts available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('contacts', before),
                 },
               ]
             : []),
@@ -599,7 +600,7 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more segments available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('segments', before),
                 },
               ]
             : []),
@@ -677,7 +678,7 @@ export function addContactTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more topics available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('topics', before),
                 },
               ]
             : []),
