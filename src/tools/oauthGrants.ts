@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const LIST_OAUTH_GRANTS_TOOL = {
   title: 'List OAuth Grants',
@@ -97,9 +98,7 @@ export function addOAuthGrantTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: before
-                    ? 'There are more OAuth grants available. Use the "before" parameter with the first ID to retrieve more.'
-                    : 'There are more OAuth grants available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('OAuth grants', before),
                 },
               ]
             : []),

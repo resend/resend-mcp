@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const SEND_EVENT_TOOL = {
   title: 'Send Event',
@@ -228,9 +229,7 @@ export function addEventTools(server: McpServer, resend: Resend) {
                 ? [
                     {
                       type: 'text' as const,
-                      text: before
-                        ? 'More events available. Use "before" with the first ID to paginate.'
-                        : 'More events available. Use "after" with the last ID to paginate.',
+                      text: moreResultsHint('events', before),
                     },
                   ]
                 : []),

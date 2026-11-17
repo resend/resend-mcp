@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 function formatDnsRecords(
   records: {
@@ -341,9 +342,7 @@ export function addDomainTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: before
-                    ? 'There are more domains available. Use the "before" parameter with the first ID to retrieve more.'
-                    : 'There are more domains available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('domains', before),
                 },
               ]
             : []),

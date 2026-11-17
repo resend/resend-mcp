@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 import { extractIdFromUrl } from '../lib/url-parser.js';
 import {
   sdkResponseToWorkflow,
@@ -485,9 +486,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: before
-                    ? 'More automations available. Use "before" with the first ID to paginate.'
-                    : 'More automations available. Use "after" with the last ID to paginate.',
+                  text: moreResultsHint('automations', before),
                 },
               ]
             : []),
@@ -645,9 +644,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: before
-                    ? 'More runs available. Use "before" with the first ID to paginate.'
-                    : 'More runs available. Use "after" with the last ID to paginate.',
+                  text: moreResultsHint('runs', before),
                 },
               ]
             : []),

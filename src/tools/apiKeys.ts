@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const CREATE_API_KEY_TOOL = {
   title: 'Create API Key',
@@ -151,9 +152,7 @@ export function addApiKeyTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: before
-                    ? 'There are more API keys available. Use the "before" parameter with the first ID to retrieve more.'
-                    : 'There are more API keys available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('API keys', before),
                 },
               ]
             : []),
