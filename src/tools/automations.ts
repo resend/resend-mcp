@@ -313,6 +313,22 @@ const GET_AUTOMATION_RUNS_TOOL = {
   },
 } as const;
 
+const CANCEL_AUTOMATION_RUN_TOOL = {
+  title: 'Cancel Automation Run',
+  annotations: { destructiveHint: true },
+  description:
+    'Cancel one automation run that is still running. Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Cancelling cannot be undone, so confirm the run with the user first. Fails if the run has already finished.',
+  inputSchema: {
+    automationId: z
+      .string()
+      .nonempty()
+      .describe(
+        'The automation ID or Resend dashboard URL (e.g. https://resend.com/automations/<id>)',
+      ),
+    runId: z.string().nonempty().describe('The ID of the run to cancel.'),
+  },
+} as const;
+
 export function addAutomationTools(server: McpServer, resend: Resend) {
   server.registerTool(
     'create-automation',
@@ -652,6 +668,31 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             type: 'text',
             text: 'Use get-automation-runs with a runId to see step-by-step details for a specific run.',
           },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'cancel-automation-run',
+    CANCEL_AUTOMATION_RUN_TOOL,
+    async ({ automationId: rawAutomationId, runId }) => {
+      const automationId = extractIdFromUrl(rawAutomationId, 'automations');
+      const response = await resend.automations.runs.cancel({
+        automationId,
+        runId,
+      });
+
+      if (response.error) {
+        throw new Error(
+          `Failed to cancel automation run: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      return {
+        content: [
+          { type: 'text', text: 'Automation run cancelled.' },
+          { type: 'text', text: `Run ID: ${response.data.id}` },
         ],
       };
     },
