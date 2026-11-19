@@ -392,7 +392,7 @@ Resend's MCP server gives your AI agent native access to the full Resend platfor
 - **Broadcasts**: Create, send, cancel, duplicate, list, get, update, and remove broadcast campaigns. List a broadcast's clicked links, and its recipients by event type (sent, delivered, opened, clicked, bounced, complained, unsubscribed, suppressed). Supports scheduling, personalization placeholders, and preview text.
 - **Automations**: Create, list, get, update, duplicate, and remove automations. Review the runs of an automation and cancel a run.
 - **Events**: Send events to trigger automations for a contact. Create, update, and remove event definitions.
-- **Domains**: Create, list, get, update, remove, and verify sender domains. Configure tracking, TLS, and sending/receiving capabilities. Create and verify domain claims.
+- **Domains**: Create, list, get, update, remove, and verify sender domains. Configure tracking, TLS, and sending/receiving capabilities. Create and verify domain claims. Enable Forge and verify only the Forge record.
 - **Segments**: Create, list, get, update, and remove audience segments.
 - **Suppressions**: List, get, add, and remove suppression list entries, individually or in batch. Hard bounces and spam complaints are suppressed automatically; add addresses manually to honor do-not-contact requests.
 - **Topics**: Create, list, get, update, and remove subscription topics.
