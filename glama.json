@@ -1,0 +1,12 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": [
+    "felipefreitag",
+    "dielduarte",
+    "gabrielmfern",
+    "cpenned",
+    "christina-de-martinez",
+    "sarahmorrisokeefe",
+    "philnash"
+  ]
+}
