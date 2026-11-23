@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 import { extractIdFromUrl } from '../lib/url-parser.js';
 import {
   sdkResponseToWorkflow,
@@ -276,7 +277,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
 - User wants to debug a failed automation run
 - User asks "why did this automation fail?" or "show me recent runs"
 
-**Run statuses:** running, completed, failed, cancelled
+**Run statuses:** running, quota_exceeded (paused until the team has sending quota again), completed, failed, cancelled
 **Step statuses:** pending, running, completed, failed, skipped, waiting`,
   inputSchema: {
     automationId: z
@@ -292,7 +293,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
         'Specific run ID to get details for. If omitted, lists all runs.',
       ),
     status: z
-      .enum(['running', 'completed', 'failed', 'cancelled'])
+      .enum(['running', 'quota_exceeded', 'completed', 'failed', 'cancelled'])
       .optional()
       .describe('Filter runs by status (for list mode only).'),
     limit: z
@@ -309,6 +310,32 @@ const GET_AUTOMATION_RUNS_TOOL = {
       .string()
       .optional()
       .describe('Cursor for backward pagination (for list mode).'),
+  },
+} as const;
+
+const CANCEL_AUTOMATION_RUN_TOOL = {
+  title: 'Cancel Automation Run',
+  annotations: {
+    readOnlyHint: false,
+    openWorldHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+  },
+  description:
+    'Cancel one automation run that has not finished (status running or quota_exceeded). Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Before using this tool, you MUST double-check with the user that they want to cancel this run. Reference the automation NAME and the run ID when confirming, and warn the user that cancelling is irreversible. You may only use this tool if the user explicitly confirms. Cancelling a run that is already cancelled succeeds and changes nothing. Fails if the run has already completed or failed.',
+  inputSchema: {
+    automationId: z
+      .string()
+      .nonempty()
+      .describe(
+        'The automation ID or Resend dashboard URL (e.g. https://resend.com/automations/<id>)',
+      ),
+    runId: z
+      .string()
+      .nonempty()
+      .describe(
+        'The ID of the run to cancel. Find it with get-automation-runs, status "running" or "quota_exceeded".',
+      ),
   },
 } as const;
 
@@ -485,7 +512,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'More automations available. Use "after" with the last ID to paginate.',
+                  text: moreResultsHint('automations', before),
                 },
               ]
             : []),
@@ -607,7 +634,10 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
               ...(status ? { status } : {}),
             };
 
-      const response = await resend.automations.runs.list(runOptions);
+      // shortcut: the SDK's AutomationRunStatus lacks quota_exceeded, which the API accepts; drop the cast once the SDK adds it.
+      const response = await resend.automations.runs.list(
+        runOptions as Parameters<typeof resend.automations.runs.list>[0],
+      );
 
       if (response.error) {
         throw new Error(
@@ -643,7 +673,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'More runs available. Use "after" with the last ID to paginate.',
+                  text: moreResultsHint('runs', before),
                 },
               ]
             : []),
@@ -651,6 +681,31 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             type: 'text',
             text: 'Use get-automation-runs with a runId to see step-by-step details for a specific run.',
           },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'cancel-automation-run',
+    CANCEL_AUTOMATION_RUN_TOOL,
+    async ({ automationId: rawAutomationId, runId }) => {
+      const automationId = extractIdFromUrl(rawAutomationId, 'automations');
+      const response = await resend.automations.runs.cancel({
+        automationId,
+        runId,
+      });
+
+      if (response.error) {
+        throw new Error(
+          `Failed to cancel automation run: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      return {
+        content: [
+          { type: 'text', text: 'Automation run cancelled.' },
+          { type: 'text', text: `Run ID: ${response.data.id}` },
         ],
       };
     },

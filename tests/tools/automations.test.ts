@@ -7,9 +7,10 @@ import { addAutomationTools } from '../../src/tools/automations.js';
 const create = vi.fn();
 const get = vi.fn();
 const duplicate = vi.fn();
+const cancel = vi.fn();
 
 const resend = {
-  automations: { create, get, duplicate },
+  automations: { create, get, duplicate, runs: { cancel } },
 } as unknown as Resend;
 
 const workflow = {
@@ -103,6 +104,55 @@ describe('automation preview URLs', () => {
       .join('\n');
     expect(text).toContain(
       'Preview: https://resend.com/automations/aut_2/editor',
+    );
+  });
+});
+
+describe('cancel-automation-run', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('cancels the run of the automation a dashboard URL points to', async () => {
+    cancel.mockResolvedValue({
+      data: { object: 'automation_run', id: 'run_1', status: 'cancelled' },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'cancel-automation-run',
+      arguments: {
+        automationId: 'https://resend.com/automations/aut_1',
+        runId: 'run_1',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(cancel).toHaveBeenCalledWith({
+      automationId: 'aut_1',
+      runId: 'run_1',
+    });
+  });
+
+  it('reports a run that already finished as an error', async () => {
+    cancel.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'validation_error',
+        message: 'This run has already finished.',
+      },
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'cancel-automation-run',
+      arguments: { automationId: 'aut_1', runId: 'run_1' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      'This run has already finished.',
     );
   });
 });

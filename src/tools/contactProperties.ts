@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 const CREATE_CONTACT_PROPERTY_TOOL = {
   title: 'Create Contact Property',
@@ -165,7 +166,7 @@ export function addContactPropertyTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more contact properties available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('contact properties', before),
                 },
               ]
             : []),

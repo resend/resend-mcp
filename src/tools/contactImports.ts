@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 import { readAllowedFile } from '../lib/safe-access.js';
 
 const CREATE_CONTACT_IMPORT_TOOL = {
@@ -311,7 +312,7 @@ export function addContactImportTools(
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more contact imports available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('contact imports', before),
                 },
               ]
             : []),

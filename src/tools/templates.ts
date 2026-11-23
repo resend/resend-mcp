@@ -6,6 +6,7 @@ import type {
 } from 'resend';
 import { z } from 'zod';
 import { EMAIL_HTML_RULES } from '../lib/email-html-rules.js';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 import type { ResendEditorClient } from '../lib/resend-editor-client.js';
 import { extractIdFromUrl } from '../lib/url-parser.js';
 
@@ -353,7 +354,7 @@ export function addTemplateTools(
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more templates available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('templates', before),
                 },
               ]
             : []),

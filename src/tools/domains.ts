@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Resend } from 'resend';
 import { z } from 'zod';
+import { moreResultsHint } from '../lib/pagination-hint.js';
 
 function formatDnsRecords(
   records: {
@@ -175,9 +176,30 @@ const REMOVE_DOMAIN_TOOL = {
 const VERIFY_DOMAIN_TOOL = {
   title: 'Verify Domain',
   description:
-    'Trigger domain verification in Resend. This starts an asynchronous verification process that checks if the DNS records are correctly configured. The domain status will temporarily show as "pending" during verification.',
+    'Trigger domain verification in Resend. This starts an asynchronous verification process that checks if the DNS records are correctly configured. The domain status will temporarily show as "pending" during verification. To verify a Forge record, always pass scope ["forge"] so only the Forge record is checked and the records that are already verified are not re-proven.',
   inputSchema: {
     id: z.string().nonempty().describe('Domain ID'),
+    scope: z
+      .array(z.enum(['forge']))
+      .optional()
+      .describe(
+        'Limit the check to specific records. The only supported value is "forge": only the Forge record is checked, and the other records keep their current status. Requires Forge to be enabled on the domain, otherwise the API responds with forge_not_enabled. When omitted, all records are checked.',
+      ),
+  },
+} as const;
+
+const ENABLE_FORGE_TOOL = {
+  title: 'Enable Forge',
+  description:
+    'Enable Forge for a domain in Resend. Forge is Resend\'s own sending infrastructure, and enabling it starts moving the domain\'s sending onto Forge with a dedicated return path. Forge offers better deliverability and faster sending. Returns the domain with a new Forge CNAME record among its DNS records. For a domain that receives email, enabling also moves receiving, and the response includes a pending Receiving MX record with a new value. The whole flow is: 1. call this tool, 2. display the returned Forge CNAME record, and the pending Receiving MX record when there is one, to the user so they can update their DNS provider, 3. once the user has updated DNS, call verify-domain with scope ["forge"], 4. poll get-domain until the Forge CNAME record\'s status is "verified", matching it by name and value, and until the Receiving MX record is "verified" too when it moved. Do not rely on the top-level domain status for this: it can show "verified" before the MX record moves. Always pass scope ["forge"] when verifying Forge: it checks only the Forge record, so the records that are already verified are not re-proven. Enabling does not start verification, and the domain keeps sending through its current records while the Forge record verifies, so there is no interruption. Idempotent: calling it again for a domain already on Forge returns the current state without starting a new migration.',
+  inputSchema: {
+    id: z.string().nonempty().describe('Domain ID'),
+    customReturnPath: z
+      .string()
+      .optional()
+      .describe(
+        'Subdomain for the Forge Return-Path address. Must start with a letter, end with a letter or digit, contain only letters, digits, and hyphens, and be 2 to 63 characters long. When omitted, Resend picks a label that is free in your DNS. Set once when Forge is enabled and cannot be changed afterwards.',
+      ),
   },
 } as const;
 
@@ -341,7 +363,7 @@ export function addDomainTools(server: McpServer, resend: Resend) {
             ? [
                 {
                   type: 'text' as const,
-                  text: 'There are more domains available. Use the "after" parameter with the last ID to retrieve more.',
+                  text: moreResultsHint('domains', before),
                 },
               ]
             : []),
@@ -426,25 +448,79 @@ export function addDomainTools(server: McpServer, resend: Resend) {
     };
   });
 
-  server.registerTool('verify-domain', VERIFY_DOMAIN_TOOL, async ({ id }) => {
-    const response = await resend.domains.verify(id);
+  server.registerTool(
+    'verify-domain',
+    VERIFY_DOMAIN_TOOL,
+    async ({ id, scope }) => {
+      const response = await resend.domains.verify(id, { scope });
 
-    if (response.error) {
-      throw new Error(
-        `Failed to verify domain: ${JSON.stringify(response.error)}`,
+      if (response.error) {
+        throw new Error(
+          `Failed to verify domain: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: scope?.includes('forge')
+              ? 'Forge verification started, checking only the Forge record. Poll get-domain and find the Forge CNAME record in the records array, matched by name and value. When its status is "verified", Forge setup is complete.'
+              : 'Domain verification started. The domain status will update once DNS records are verified.',
+          },
+          { type: 'text', text: `ID: ${response.data.id}` },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'enable-forge',
+    ENABLE_FORGE_TOOL,
+    async ({ id, customReturnPath }) => {
+      const response = await resend.domains.forge.enable({
+        id,
+        customReturnPath,
+      });
+
+      if (response.error) {
+        throw new Error(
+          `Failed to enable Forge: ${JSON.stringify(response.error)}`,
+        );
+      }
+
+      const domain = response.data;
+      const receivingMoves = domain.records.some(
+        (record) =>
+          record.record === 'Receiving' && record.status === 'pending',
       );
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Domain verification started. The domain status will update once DNS records are verified.',
-        },
-        { type: 'text', text: `ID: ${response.data.id}` },
-      ],
-    };
-  });
+      return {
+        content: [
+          { type: 'text', text: 'Forge activation request accepted.' },
+          {
+            type: 'text',
+            text: `Name: ${domain.name}\nID: ${domain.id}`,
+          },
+          {
+            type: 'text',
+            text: `DNS Records:\n\n${formatDnsRecords(domain.records)}`,
+          },
+          {
+            type: 'text',
+            text: 'IMPORTANT: Display the Forge CNAME record above to the user so they can add it at their DNS provider. Enabling does not start verification. After the user adds the record, call verify-domain with scope ["forge"] so only the Forge record is checked, then poll get-domain until that record\'s status is "verified", matching it by name and value.',
+          },
+          ...(receivingMoves
+            ? [
+                {
+                  type: 'text' as const,
+                  text: 'IMPORTANT: Enabling Forge also moves receiving for this domain. Display the pending Receiving MX record above too, so the user replaces the current MX record with it. The setup is complete only when get-domain shows both the Forge CNAME record and the Receiving MX record as "verified". Do not rely on the top-level domain status: it can show "verified" before the MX record moves.',
+                },
+              ]
+            : []),
+        ],
+      };
+    },
+  );
 
   server.registerTool(
     'create-domain-claim',
