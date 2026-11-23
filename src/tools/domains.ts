@@ -36,7 +36,7 @@ function formatClaimRecord(record: {
 const CREATE_DOMAIN_TOOL = {
   title: 'Create Domain',
   description:
-    'Create a new domain in Resend. Returns DNS records that must be configured with your DNS provider for verification. You MUST display the DNS records to the user so they can set them up.',
+    "Create a new domain in Resend. Returns DNS records that must be configured with the domain's DNS provider for verification. If you have a tool that manages the domain's DNS (an MCP server, CLI or API of its DNS provider), offer to add them yourself. Otherwise, you MUST display the DNS records to the user so they can set them up.",
   inputSchema: {
     name: z.string().nonempty().describe('The domain name (e.g., example.com)'),
     region: z
@@ -307,7 +307,7 @@ export function addDomainTools(server: McpServer, resend: Resend) {
           },
           {
             type: 'text',
-            text: 'IMPORTANT: Display the DNS records above to the user so they can configure them with their DNS provider. After configuration, use verify-domain to start verification.',
+            text: 'IMPORTANT: If you have a tool that manages the domain\'s DNS (an MCP server, CLI or API of its DNS provider), ask the user whether you should add the records above, and with their OK add exactly these records, as DNS-only records without a proxy or CDN in front. If an SPF record already exists at the same name, add the new mechanisms to it instead of creating a second SPF record or value. If an MX record already exists at the same name, ask before adding or replacing one. Otherwise, display the DNS records above to the user so they can configure them with their DNS provider. Once the records are added (by you, or by the user after they tell you), tell the user you will let them know once Resend confirms the domain is verified. Do not say you are starting verification. Then call verify-domain once without a scope and check get-domain about every 30 seconds, up to 10 times, until the status is "verified". Check quietly: if you can wait in the background, do it there, and do not message the user between checks or report progress on single records. Message the user only once: when the domain is verified, or, if it is still not verified after the last check, to say which records are still pending and ask them to tell you once those are in place.',
           },
         ],
       };
