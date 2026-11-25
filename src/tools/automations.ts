@@ -283,7 +283,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
 - completed: every step on the run's path finished
 - failed: a step hit an error it could not recover from. Something needs fixing
 - cancelled: stopped on purpose, not by an error. Someone cancelled the run, stopped the automation and its runs, or disabled or deleted the automation while the run was in progress
-- skipped: ended on its own because its contact was deleted while the run was in progress. Not an error, nothing to fix, and it cannot be cancelled. The step it ended at has the reason contact_deleted
+- skipped: ended on its own because it could no longer continue. Not an error, nothing to fix, and it cannot be cancelled. The step it ended at has the reason, for example contact_deleted when the run's contact was deleted while the run was in progress
 
 Every run is for one contact, the one named in the event that triggered it. A run cannot go on without it.
 For cancelled and skipped runs, steps that already finished stay finished and emails already sent are not recalled.
