@@ -167,7 +167,7 @@ const UPDATE_AUTOMATION_TOOL = {
 - User wants to modify the workflow steps
 
 **Important:**
-- To disable/stop an automation, set status to "disabled". Existing runs will continue to completion.
+- To disable/stop an automation, set status to "disabled". No new runs start, and each run in progress is cancelled when it reaches its next step.
 - When updating the workflow, provide the complete new workflow — it replaces the existing one.
 - Use get-automation first to see the current workflow before making changes.
 
@@ -277,7 +277,16 @@ const GET_AUTOMATION_RUNS_TOOL = {
 - User wants to debug a failed automation run
 - User asks "why did this automation fail?" or "show me recent runs"
 
-**Run statuses:** running, quota_exceeded (paused until the team has sending quota again), completed, failed, cancelled (someone stopped it), skipped (it stopped on its own because a step could no longer apply, for example the contact was deleted mid-run. Not an error, nothing to fix)
+**Run statuses:**
+- running: still going, including while it waits in a delay or wait_for_event step
+- quota_exceeded: paused until the team has sending quota again
+- completed: every step on the run's path finished
+- failed: a step hit an error it could not recover from. Something needs fixing
+- cancelled: stopped on purpose, not by an error. Someone cancelled the run, stopped the automation and its runs, or disabled or deleted the automation while the run was in progress
+- skipped: ended on its own because its contact was deleted while the run was in progress. Not an error, nothing to fix, and it cannot be cancelled. The step it ended at has the reason contact_deleted
+
+Every run is for one contact, the one named in the event that triggered it. A run cannot go on without it.
+For cancelled and skipped runs, steps that already finished stay finished and emails already sent are not recalled.
 **Step statuses:** pending, running, completed, failed, skipped, waiting`,
   inputSchema: {
     automationId: z
@@ -425,7 +434,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
       if (status === 'disabled') {
         resultParts.push({
           type: 'text',
-          text: 'The automation is now disabled. No new runs will start, but existing runs will continue to completion.',
+          text: 'The automation is now disabled. No new runs will start, and each run in progress is cancelled when it reaches its next step.',
         });
       }
 
