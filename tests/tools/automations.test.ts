@@ -8,9 +8,10 @@ const create = vi.fn();
 const get = vi.fn();
 const duplicate = vi.fn();
 const cancel = vi.fn();
+const listRuns = vi.fn();
 
 const resend = {
-  automations: { create, get, duplicate, runs: { cancel } },
+  automations: { create, get, duplicate, runs: { cancel, list: listRuns } },
 } as unknown as Resend;
 
 const workflow = {
@@ -154,5 +155,42 @@ describe('cancel-automation-run', () => {
     expect(JSON.stringify(result.content)).toContain(
       'This run has already finished.',
     );
+  });
+});
+
+describe('get-automation-runs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('filters the run list by the skipped status', async () => {
+    listRuns.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          {
+            id: 'run_1',
+            status: 'skipped',
+            started_at: '2026-08-27T10:00:00.000Z',
+            completed_at: '2026-08-30T10:00:01.000Z',
+            created_at: '2026-08-27T10:00:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1', status: 'skipped' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(listRuns).toHaveBeenCalledWith({
+      automationId: 'aut_1',
+      status: 'skipped',
+    });
   });
 });

@@ -277,7 +277,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
 - User wants to debug a failed automation run
 - User asks "why did this automation fail?" or "show me recent runs"
 
-**Run statuses:** running, quota_exceeded (paused until the team has sending quota again), completed, failed, cancelled
+**Run statuses:** running, quota_exceeded (paused until the team has sending quota again), completed, failed, cancelled (someone stopped it), skipped (it stopped on its own because a step could no longer apply, for example the contact was deleted mid-run. Not an error, nothing to fix)
 **Step statuses:** pending, running, completed, failed, skipped, waiting`,
   inputSchema: {
     automationId: z
@@ -293,7 +293,14 @@ const GET_AUTOMATION_RUNS_TOOL = {
         'Specific run ID to get details for. If omitted, lists all runs.',
       ),
     status: z
-      .enum(['running', 'quota_exceeded', 'completed', 'failed', 'cancelled'])
+      .enum([
+        'running',
+        'quota_exceeded',
+        'completed',
+        'failed',
+        'cancelled',
+        'skipped',
+      ])
       .optional()
       .describe('Filter runs by status (for list mode only).'),
     limit: z
@@ -322,7 +329,7 @@ const CANCEL_AUTOMATION_RUN_TOOL = {
     idempotentHint: true,
   },
   description:
-    'Cancel one automation run that has not finished (status running or quota_exceeded). Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Before using this tool, you MUST double-check with the user that they want to cancel this run. Reference the automation NAME and the run ID when confirming, and warn the user that cancelling is irreversible. You may only use this tool if the user explicitly confirms. Cancelling a run that is already cancelled succeeds and changes nothing. Fails if the run has already completed or failed.',
+    'Cancel one automation run that has not finished (status running or quota_exceeded). Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Before using this tool, you MUST double-check with the user that they want to cancel this run. Reference the automation NAME and the run ID when confirming, and warn the user that cancelling is irreversible. You may only use this tool if the user explicitly confirms. Cancelling a run that is already cancelled succeeds and changes nothing. Fails if the run has already completed, failed or been skipped.',
   inputSchema: {
     automationId: z
       .string()
@@ -634,7 +641,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
               ...(status ? { status } : {}),
             };
 
-      // shortcut: the SDK's AutomationRunStatus lacks quota_exceeded, which the API accepts; drop the cast once the SDK adds it.
+      // shortcut: the SDK's AutomationRunStatus lacks quota_exceeded and skipped, which the API accepts; drop the cast once the SDK adds them.
       const response = await resend.automations.runs.list(
         runOptions as Parameters<typeof resend.automations.runs.list>[0],
       );
