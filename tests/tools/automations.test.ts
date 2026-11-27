@@ -193,4 +193,55 @@ describe('get-automation-runs', () => {
       status: 'skipped',
     });
   });
+  it('shows the reason on failed and skipped runs only', async () => {
+    listRuns.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          {
+            id: 'run_failed',
+            status: 'failed',
+            status_reason: 'missing_variable',
+            started_at: '2026-08-27T10:00:00.000Z',
+            completed_at: '2026-08-27T10:00:02.000Z',
+            created_at: '2026-08-27T10:00:00.000Z',
+          },
+          {
+            id: 'run_skipped',
+            status: 'skipped',
+            status_reason: 'contact_deleted',
+            started_at: '2026-08-27T11:00:00.000Z',
+            completed_at: '2026-08-27T11:00:01.000Z',
+            created_at: '2026-08-27T11:00:00.000Z',
+          },
+          {
+            id: 'run_completed',
+            status: 'completed',
+            started_at: '2026-08-27T12:00:00.000Z',
+            completed_at: '2026-08-27T12:00:05.000Z',
+            created_at: '2026-08-27T12:00:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1' },
+    });
+
+    const texts = (result.content as { text: string }[]).map((c) => c.text);
+    expect(texts.find((t) => t.includes('run_failed'))).toContain(
+      'Reason: missing_variable',
+    );
+    expect(texts.find((t) => t.includes('run_skipped'))).toContain(
+      'Reason: contact_deleted',
+    );
+    expect(texts.find((t) => t.includes('run_completed'))).not.toContain(
+      'Reason:',
+    );
+  });
 });

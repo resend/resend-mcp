@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { Resend } from 'resend';
+import type { AutomationRunItem, Resend } from 'resend';
 import { z } from 'zod';
 import { moreResultsHint } from '../lib/pagination-hint.js';
 import { extractIdFromUrl } from '../lib/url-parser.js';
@@ -263,6 +263,19 @@ const REMOVE_AUTOMATION_TOOL = {
   },
 } as const;
 
+function formatRunListItem(run: AutomationRunItem) {
+  const lines = [`ID: ${run.id}`, `Status: ${run.status}`];
+  if (run.status_reason) {
+    lines.push(`Reason: ${run.status_reason}`);
+  }
+  lines.push(
+    `Started: ${run.started_at ?? 'not started'}`,
+    `Completed: ${run.completed_at ?? 'in progress'}`,
+    `Created: ${run.created_at}`,
+  );
+  return lines.join('\n');
+}
+
 const GET_AUTOMATION_RUNS_TOOL = {
   title: 'Get Automation Runs',
   annotations: { readOnlyHint: true },
@@ -270,7 +283,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
 
 **Modes:**
 - With \`runId\`: Returns detailed run info with step-by-step execution status, outputs, and errors.
-- Without \`runId\`: Lists runs for the automation with optional status filter.
+- Without \`runId\`: Lists runs for the automation with optional status filter. Failed and skipped runs include the reason they ended (for example missing_variable or contact_deleted).
 
 **When to use:**
 - User wants to see if an automation is working
@@ -650,10 +663,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
               ...(status ? { status } : {}),
             };
 
-      // shortcut: the SDK's AutomationRunStatus lacks quota_exceeded and skipped, which the API accepts; drop the cast once the SDK adds them.
-      const response = await resend.automations.runs.list(
-        runOptions as Parameters<typeof resend.automations.runs.list>[0],
-      );
+      const response = await resend.automations.runs.list(runOptions);
 
       if (response.error) {
         throw new Error(
@@ -681,9 +691,9 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             type: 'text',
             text: `Found ${runs.length} run${runs.length === 1 ? '' : 's'}:`,
           },
-          ...runs.map((r) => ({
+          ...runs.map((run) => ({
             type: 'text' as const,
-            text: `ID: ${r.id}\nStatus: ${r.status}\nStarted: ${r.started_at ?? 'not started'}\nCompleted: ${r.completed_at ?? 'in progress'}\nCreated: ${r.created_at}`,
+            text: formatRunListItem(run),
           })),
           ...(hasMore
             ? [
