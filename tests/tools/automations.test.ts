@@ -12,7 +12,12 @@ const listRuns = vi.fn();
 const getRun = vi.fn();
 
 const resend = {
-  automations: { create, get, duplicate, runs: { cancel, list: listRuns, get: getRun } },
+  automations: {
+    create,
+    get,
+    duplicate,
+    runs: { cancel, list: listRuns, get: getRun },
+  },
 } as unknown as Resend;
 
 const workflow = {
