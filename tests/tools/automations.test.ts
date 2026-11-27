@@ -8,9 +8,16 @@ const create = vi.fn();
 const get = vi.fn();
 const duplicate = vi.fn();
 const cancel = vi.fn();
+const listRuns = vi.fn();
+const getRun = vi.fn();
 
 const resend = {
-  automations: { create, get, duplicate, runs: { cancel } },
+  automations: {
+    create,
+    get,
+    duplicate,
+    runs: { cancel, list: listRuns, get: getRun },
+  },
 } as unknown as Resend;
 
 const workflow = {
@@ -154,5 +161,119 @@ describe('cancel-automation-run', () => {
     expect(JSON.stringify(result.content)).toContain(
       'This run has already finished.',
     );
+  });
+});
+
+describe('get-automation-runs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('filters the run list by the skipped status', async () => {
+    listRuns.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          {
+            id: 'run_1',
+            status: 'skipped',
+            started_at: '2026-08-27T10:00:00.000Z',
+            completed_at: '2026-08-30T10:00:01.000Z',
+            created_at: '2026-08-27T10:00:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1', status: 'skipped' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(listRuns).toHaveBeenCalledWith({
+      automationId: 'aut_1',
+      status: 'skipped',
+    });
+  });
+  it('shows the reason on failed and skipped runs only', async () => {
+    listRuns.mockResolvedValue({
+      data: {
+        object: 'list',
+        has_more: false,
+        data: [
+          {
+            id: 'run_failed',
+            status: 'failed',
+            status_reason: 'missing_variable',
+            started_at: '2026-08-27T10:00:00.000Z',
+            completed_at: '2026-08-27T10:00:02.000Z',
+            created_at: '2026-08-27T10:00:00.000Z',
+          },
+          {
+            id: 'run_skipped',
+            status: 'skipped',
+            status_reason: 'contact_deleted',
+            started_at: '2026-08-27T11:00:00.000Z',
+            completed_at: '2026-08-27T11:00:01.000Z',
+            created_at: '2026-08-27T11:00:00.000Z',
+          },
+          {
+            id: 'run_completed',
+            status: 'completed',
+            started_at: '2026-08-27T12:00:00.000Z',
+            completed_at: '2026-08-27T12:00:05.000Z',
+            created_at: '2026-08-27T12:00:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1' },
+    });
+
+    const texts = (result.content as { text: string }[]).map((c) => c.text);
+    expect(texts.find((t) => t.includes('run_failed'))).toContain(
+      'Reason: missing_variable',
+    );
+    expect(texts.find((t) => t.includes('run_skipped'))).toContain(
+      'Reason: contact_deleted',
+    );
+    expect(texts.find((t) => t.includes('run_completed'))).not.toContain(
+      'Reason:',
+    );
+  });
+
+  it('shows the reason when getting a single skipped run', async () => {
+    getRun.mockResolvedValue({
+      data: {
+        object: 'automation_run',
+        id: 'run_skipped',
+        status: 'skipped',
+        status_reason: 'contact_deleted',
+        started_at: '2026-08-27T11:00:00.000Z',
+        completed_at: '2026-08-27T11:00:01.000Z',
+        created_at: '2026-08-27T11:00:00.000Z',
+        steps: [],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1', runId: 'run_skipped' },
+    });
+
+    const texts = (result.content as { text: string }[]).map((c) => c.text);
+    expect(texts[0]).toContain('Run ID: run_skipped');
+    expect(texts[0]).toContain('Reason: contact_deleted');
   });
 });

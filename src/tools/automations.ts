@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { Resend } from 'resend';
+import type { AutomationRunItem, Resend } from 'resend';
 import { z } from 'zod';
 import { moreResultsHint } from '../lib/pagination-hint.js';
 import { extractIdFromUrl } from '../lib/url-parser.js';
@@ -167,7 +167,7 @@ const UPDATE_AUTOMATION_TOOL = {
 - User wants to modify the workflow steps
 
 **Important:**
-- To disable/stop an automation, set status to "disabled". Existing runs will continue to completion.
+- To disable/stop an automation, set status to "disabled". No new runs start, and each run in progress is cancelled when it reaches its next step.
 - When updating the workflow, provide the complete new workflow — it replaces the existing one.
 - Use get-automation first to see the current workflow before making changes.
 
@@ -263,21 +263,43 @@ const REMOVE_AUTOMATION_TOOL = {
   },
 } as const;
 
+function formatRunSummary(run: AutomationRunItem, idLabel = 'ID') {
+  const lines = [`${idLabel}: ${run.id}`, `Status: ${run.status}`];
+  if (run.status_reason) {
+    lines.push(`Reason: ${run.status_reason}`);
+  }
+  lines.push(
+    `Started: ${run.started_at ?? 'not started'}`,
+    `Completed: ${run.completed_at ?? 'in progress'}`,
+    `Created: ${run.created_at}`,
+  );
+  return lines.join('\n');
+}
+
 const GET_AUTOMATION_RUNS_TOOL = {
   title: 'Get Automation Runs',
   annotations: { readOnlyHint: true },
   description: `**Purpose:** List runs for an automation, or get details of a specific run.
 
 **Modes:**
-- With \`runId\`: Returns detailed run info with step-by-step execution status, outputs, and errors.
-- Without \`runId\`: Lists runs for the automation with optional status filter.
+- With \`runId\`: Returns detailed run info with step-by-step execution status, outputs, and errors. Failed and skipped runs include the reason they ended.
+- Without \`runId\`: Lists runs for the automation with optional status filter. Failed and skipped runs include the reason they ended (for example missing_variable or contact_deleted).
 
 **When to use:**
 - User wants to see if an automation is working
 - User wants to debug a failed automation run
 - User asks "why did this automation fail?" or "show me recent runs"
 
-**Run statuses:** running, quota_exceeded (paused until the team has sending quota again), completed, failed, cancelled
+**Run statuses:**
+- running: still going, including while it waits in a delay or wait_for_event step
+- quota_exceeded: paused until the team has sending quota again
+- completed: every step on the run's path finished
+- failed: a step hit an error it could not recover from. Something needs fixing
+- cancelled: stopped on purpose, not by an error. Someone cancelled the run, stopped the automation and its runs, or disabled or deleted the automation while the run was in progress
+- skipped: ended on its own because it could no longer continue. Not an error, nothing to fix, and it cannot be cancelled. The step it ended at has the reason, for example contact_deleted when the run's contact was deleted while the run was in progress
+
+Every run is for one contact, the one named in the event that triggered it. A run cannot go on without it.
+For cancelled and skipped runs, steps that already finished stay finished and emails already sent are not recalled.
 **Step statuses:** pending, running, completed, failed, skipped, waiting`,
   inputSchema: {
     automationId: z
@@ -293,7 +315,14 @@ const GET_AUTOMATION_RUNS_TOOL = {
         'Specific run ID to get details for. If omitted, lists all runs.',
       ),
     status: z
-      .enum(['running', 'quota_exceeded', 'completed', 'failed', 'cancelled'])
+      .enum([
+        'running',
+        'quota_exceeded',
+        'completed',
+        'failed',
+        'cancelled',
+        'skipped',
+      ])
       .optional()
       .describe('Filter runs by status (for list mode only).'),
     limit: z
@@ -322,7 +351,7 @@ const CANCEL_AUTOMATION_RUN_TOOL = {
     idempotentHint: true,
   },
   description:
-    'Cancel one automation run that has not finished (status running or quota_exceeded). Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Before using this tool, you MUST double-check with the user that they want to cancel this run. Reference the automation NAME and the run ID when confirming, and warn the user that cancelling is irreversible. You may only use this tool if the user explicitly confirms. Cancelling a run that is already cancelled succeeds and changes nothing. Fails if the run has already completed or failed.',
+    'Cancel one automation run that has not finished (status running or quota_exceeded). Its remaining steps are skipped, so the contact gets no further emails from this run. Other runs and the automation itself keep going; to stop new runs, disable the automation with update-automation. Before using this tool, you MUST double-check with the user that they want to cancel this run. Reference the automation NAME and the run ID when confirming, and warn the user that cancelling is irreversible. You may only use this tool if the user explicitly confirms. Cancelling a run that is already cancelled succeeds and changes nothing. Fails if the run has already completed, failed or been skipped.',
   inputSchema: {
     automationId: z
       .string()
@@ -418,7 +447,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
       if (status === 'disabled') {
         resultParts.push({
           type: 'text',
-          text: 'The automation is now disabled. No new runs will start, but existing runs will continue to completion.',
+          text: 'The automation is now disabled. No new runs will start, and each run in progress is cancelled when it reaches its next step.',
         });
       }
 
@@ -607,7 +636,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
           content: [
             {
               type: 'text',
-              text: `Run ID: ${run.id}\nStatus: ${run.status}\nStarted: ${run.started_at ?? 'not started'}\nCompleted: ${run.completed_at ?? 'in progress'}\nCreated: ${run.created_at}`,
+              text: formatRunSummary(run, 'Run ID'),
             },
             {
               type: 'text',
@@ -634,10 +663,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
               ...(status ? { status } : {}),
             };
 
-      // shortcut: the SDK's AutomationRunStatus lacks quota_exceeded, which the API accepts; drop the cast once the SDK adds it.
-      const response = await resend.automations.runs.list(
-        runOptions as Parameters<typeof resend.automations.runs.list>[0],
-      );
+      const response = await resend.automations.runs.list(runOptions);
 
       if (response.error) {
         throw new Error(
@@ -665,9 +691,9 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
             type: 'text',
             text: `Found ${runs.length} run${runs.length === 1 ? '' : 's'}:`,
           },
-          ...runs.map((r) => ({
+          ...runs.map((run) => ({
             type: 'text' as const,
-            text: `ID: ${r.id}\nStatus: ${r.status}\nStarted: ${r.started_at ?? 'not started'}\nCompleted: ${r.completed_at ?? 'in progress'}\nCreated: ${r.created_at}`,
+            text: formatRunSummary(run),
           })),
           ...(hasMore
             ? [
