@@ -263,8 +263,8 @@ const REMOVE_AUTOMATION_TOOL = {
   },
 } as const;
 
-function formatRunListItem(run: AutomationRunItem) {
-  const lines = [`ID: ${run.id}`, `Status: ${run.status}`];
+function formatRunSummary(run: AutomationRunItem, idLabel = 'ID') {
+  const lines = [`${idLabel}: ${run.id}`, `Status: ${run.status}`];
   if (run.status_reason) {
     lines.push(`Reason: ${run.status_reason}`);
   }
@@ -282,7 +282,7 @@ const GET_AUTOMATION_RUNS_TOOL = {
   description: `**Purpose:** List runs for an automation, or get details of a specific run.
 
 **Modes:**
-- With \`runId\`: Returns detailed run info with step-by-step execution status, outputs, and errors.
+- With \`runId\`: Returns detailed run info with step-by-step execution status, outputs, and errors. Failed and skipped runs include the reason they ended.
 - Without \`runId\`: Lists runs for the automation with optional status filter. Failed and skipped runs include the reason they ended (for example missing_variable or contact_deleted).
 
 **When to use:**
@@ -636,7 +636,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
           content: [
             {
               type: 'text',
-              text: `Run ID: ${run.id}\nStatus: ${run.status}\nStarted: ${run.started_at ?? 'not started'}\nCompleted: ${run.completed_at ?? 'in progress'}\nCreated: ${run.created_at}`,
+              text: formatRunSummary(run, 'Run ID'),
             },
             {
               type: 'text',
@@ -693,7 +693,7 @@ export function addAutomationTools(server: McpServer, resend: Resend) {
           },
           ...runs.map((run) => ({
             type: 'text' as const,
-            text: formatRunListItem(run),
+            text: formatRunSummary(run),
           })),
           ...(hasMore
             ? [

@@ -9,9 +9,10 @@ const get = vi.fn();
 const duplicate = vi.fn();
 const cancel = vi.fn();
 const listRuns = vi.fn();
+const getRun = vi.fn();
 
 const resend = {
-  automations: { create, get, duplicate, runs: { cancel, list: listRuns } },
+  automations: { create, get, duplicate, runs: { cancel, list: listRuns, get: getRun } },
 } as unknown as Resend;
 
 const workflow = {
@@ -243,5 +244,31 @@ describe('get-automation-runs', () => {
     expect(texts.find((t) => t.includes('run_completed'))).not.toContain(
       'Reason:',
     );
+  });
+
+  it('shows the reason when getting a single skipped run', async () => {
+    getRun.mockResolvedValue({
+      data: {
+        object: 'automation_run',
+        id: 'run_skipped',
+        status: 'skipped',
+        status_reason: 'contact_deleted',
+        started_at: '2026-08-27T11:00:00.000Z',
+        completed_at: '2026-08-27T11:00:01.000Z',
+        created_at: '2026-08-27T11:00:00.000Z',
+        steps: [],
+      },
+      error: null,
+    });
+    const client = await makeClient();
+
+    const result = await client.callTool({
+      name: 'get-automation-runs',
+      arguments: { automationId: 'aut_1', runId: 'run_skipped' },
+    });
+
+    const texts = (result.content as { text: string }[]).map((c) => c.text);
+    expect(texts[0]).toContain('Run ID: run_skipped');
+    expect(texts[0]).toContain('Reason: contact_deleted');
   });
 });
