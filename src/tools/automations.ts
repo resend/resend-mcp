@@ -22,7 +22,7 @@ Uses "next".
 
 ### send_email — send an email using a published template
 config: { "template": { "id": "<template_id>", "variables": { "<key>": "<value>" } }, "from": "Name <sender@example.com>", "subject": "Email subject", "replyTo": "<address>" }
-**"from" and "subject" are resolved from the step config first, then fall back to the template.** If neither provides a "from", the email will silently fail to send. If neither provides a "subject", the run will error. Best practice: always set "from" and "subject" on the step config so the automation is self-contained. Use list-domains to find verified domains for "from". "replyTo" and "variables" are optional. Variables can use { "var": "event.<field>" } or { "var": "contact.<field>" } for dynamic values.
+**"from" and "subject" are resolved from the step config first, then fall back to the template.** If neither provides a "from" or a "subject", saving the automation fails. Best practice: always set "from" and "subject" on the step config so the automation is self-contained. Use list-domains to find verified domains for "from". "replyTo" and "variables" are optional. Variables can use { "var": "event.<field>" } or { "var": "contact.<field>" } for dynamic values. Every template variable without a fallback value that the template reads must be set here. The template itself cannot read contact fields like {{{contact.first_name}}} or use inline fallbacks like {{{NAME|there}}}: add a template variable, map it here, and set its fallback on the template. Saving the automation fails otherwise.
 Uses "next".
 
 ### delay — pause the workflow
